@@ -550,5 +550,5 @@ def main():
         for mon in mons:
             s.saves.append(mon.saveData)
 
-
-main()
+if __name__ == "__main__":
+    main()
