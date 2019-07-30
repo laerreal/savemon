@@ -10,6 +10,7 @@ from shutil import (
     move
 )
 from os import (
+    sep,
     mkdir,
     listdir,
     remove
@@ -38,6 +39,10 @@ from re import (
 from sys import (
     stdout
 )
+from subprocess import (
+    Popen
+)
+
 
 try:
     from wx import (
@@ -72,6 +77,18 @@ except ImportError:
     exit(-1)
 
 try:
+    from git import (
+        Repo,
+        InvalidGitRepositoryError
+    )
+except ImportError:
+    print_exc()
+    print("try python -m pip install --upgrade gitpython")
+    exit(-1)
+
+# Windows
+#########
+try:
     from win32file import (
         CreateFile,
         FILE_SHARE_READ,
@@ -102,15 +119,11 @@ ACTIONS = {
   5 : "Renamed to something"
 }
 
-try:
-    from git import (
-        Repo,
-        InvalidGitRepositoryError
-    )
-except ImportError:
-    print_exc()
-    print("try python -m pip install --upgrade gitpython")
-    exit(-1)
+def open_directory_in_explorer(path):
+    Popen('explorer "%s"' % path)
+
+# Generic
+#########
 
 logLock = Lock()
 
@@ -372,6 +385,10 @@ class SaveMonitor(Frame):
         selectSaveDir = Button(self, -1, "Select")
         saveDirSizer.Add(selectSaveDir, 0, EXPAND)
         self.Bind(EVT_BUTTON, self.OnSelectSaveDir, selectSaveDir)
+        openSave = Button(self, label = "Open")
+        saveDirSizer.Add(openSave, 0, EXPAND)
+        self.Bind(EVT_BUTTON, self.OnOpenSaveDir, openSave)
+
 
         backupDirSizer = BoxSizer(HORIZONTAL)
         self.backupDir = TextCtrl(self)
@@ -384,6 +401,9 @@ class SaveMonitor(Frame):
         selectBackupDir = Button(self, -1, "Select")
         self.Bind(EVT_BUTTON, self.OnSelectBackupDir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
+        openBackup = Button(self, label = "Open")
+        backupDirSizer.Add(openBackup, 0, EXPAND)
+        self.Bind(EVT_BUTTON, self.OnOpenBackupDir, openBackup)
 
         filterOutSizer = BoxSizer(HORIZONTAL)
         filterOutSizer.Add(StaticText(self, label = "Filter Out"), 0, EXPAND)
@@ -411,6 +431,16 @@ class SaveMonitor(Frame):
         self.SetSizer(mainSizer)
 
         self.Bind(EVT_CLOSE, self.OnClose, self)
+
+    def OpenDir(self, path):
+        if exists(path):
+            open_directory_in_explorer(path)
+
+    def OnOpenSaveDir(self, _):
+        self.OpenDir(self.saveDir.GetValue())
+
+    def OnOpenBackupDir(self, _):
+        self.OpenDir(self.backupDir.GetValue())
 
     def OnSelectSaveDir(self, _):
         if not hasattr(self, "dlgSaveDir"):
