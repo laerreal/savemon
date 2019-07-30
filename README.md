@@ -16,3 +16,23 @@ tools to access previous file versions
 (ex. [TortoiseGit](https://tortoisegit.org/download) for Windows)
 
 It's Windows-only (for now).
+
+## How to (Windows)
+
+1. Install Python. At least version 
+[3.7](https://www.python.org/downloads/windows/)
+is recommended.
+
+2. Launch `cmd.exe` (`Win` + `R` shortcut) install dependencies of the
+utility:
+```
+C:\Python37\python.exe -m pip install wxPython pywin32 gitpython
+```
+
+3. Install [Git](https://git-scm.com/download/win) because it seems to
+be required by `pywin32` and, likely, by you to access old versions of
+backed up files.
+
+4. Launch `savemon.py`.
+Python normally integrates to file explorer during installation to
+allow launching scripts on double click.
