@@ -475,25 +475,26 @@ class SaveMonitor(Frame):
             if root in self.root2threads:
                 return # already monitored
 
+            filterOutRe = None
             filterOut = self.filterOut.GetValue()
-            try:
-                filterOutRe = compile(filterOut)
-            except:
-                if filterOut:
-                    dlg = MessageDialog(self, "Incorrect filter expression"
-                            " (use Python's re syntax)\n" + format_exc() +
-                            "\nContinue without filter?",
-                        "Filter Out Error",
-                        YES_NO
-                    )
-                    res = dlg.ShowModal()
-                    dlg.Destroy()
-                    if res == ID_NO:
-                        self.cbMonitor.SetValue(False)
-                        self.EnableSettings()
-                        return
+            if filterOut:
+                try:
+                    filterOutRe = compile(filterOut)
+                except:
+                    if filterOut:
+                        dlg = MessageDialog(self, "Incorrect filter expression"
+                                " (use Python's re syntax)\n" + format_exc() +
+                                "\nContinue without filter?",
+                            "Filter Out Error",
+                            YES_NO
+                        )
+                        res = dlg.ShowModal()
+                        dlg.Destroy()
+                        if res == ID_NO:
+                            self.cbMonitor.SetValue(False)
+                            self.EnableSettings()
+                            return
 
-                filterOutRe = None
             mt = MonitorThread(root, lambda : self.root2threads.pop(root))
             bt = BackUpThread(root, backup, mt.changes, filterOutRe)
             self.root2threads[root] = (mt, bt)
