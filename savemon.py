@@ -356,6 +356,8 @@ class BackUpThread(Thread):
                 changes.add(change)
             lastChange = time()
 
+        log("Stop backing up of '%s'" % saveDir)
+
 
 class SaveMonitor(Frame):
 
