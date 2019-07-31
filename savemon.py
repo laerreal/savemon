@@ -330,7 +330,8 @@ class BackUpThread(Thread):
 
         lastChange = time()
 
-        while not self.exit_request:
+        # Do not exit until detected changes are committed
+        while not self.exit_request or changes:
             try:
                 change = self.qchanges.get(timeout = 0.1)
             except Empty:
