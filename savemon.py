@@ -42,10 +42,18 @@ from sys import (
 from subprocess import (
     Popen
 )
+from itertools import (
+    count
+)
 
 
 try:
     from wx import (
+        EVT_SIZE,
+        EVT_PAINT,
+        AutoBufferedPaintDC, # is it cross-platform?
+        BG_STYLE_CUSTOM,
+        Dialog,
         App,
         Frame,
         EVT_CLOSE,
@@ -359,6 +367,113 @@ class BackUpThread(Thread):
         log("Stop backing up of '%s'" % saveDir)
 
 
+class Commit(object):
+
+    cache = {}
+
+    def __init__(self, backed):
+        self.backed = backed
+        self._parents = None
+
+    @property
+    def parents(self):
+        ps = self._parents
+        if ps is None:
+            ps = []
+            cache = Commit.cache
+            for p in self.backed.parents:
+                if p in cache:
+                    pc = cache[p]
+                else:
+                    pc = Commit(p)
+                    cache[p] = pc
+                ps.append(pc)
+            self._parents = ps
+        return ps
+
+
+class BackupManager(Dialog):
+
+    def __init__(self, parent, backupDir):
+        super(Dialog, self).__init__(parent,
+            title = "Backup manager (%s)" % backupDir,
+            size = (500, 500)
+        )
+        self.backupDir = backupDir
+        self.scale, self.shift = 4, 8
+        self.refresh_graph()
+
+        self.Bind(EVT_SIZE, self.on_size)
+        self.SetBackgroundStyle(BG_STYLE_CUSTOM)
+        self.Bind(EVT_PAINT, self.on_paint)
+
+    def on_size(self, event):
+        event.Skip()
+        self.Refresh()
+
+    def refresh_graph(self):
+        try:
+            repo = Repo(self.backupDir)
+        except:
+            log("Cannot refresh backup")
+            log(format_exc())
+            return
+
+        queue = []
+
+        Commit.cache = {}
+        self.graph = graph = {}
+
+        for i, head in enumerate(repo.heads):
+            c = Commit(head.commit)
+            c._i = i
+            c._j = 0
+            queue.append(c)
+            graph[(c._i, c._j)] = c
+
+        self.g_height = width = i + 1
+
+        J = list(count() for _ in range(width))
+
+        self.lines = lines = []
+
+        while queue:
+            c = queue.pop(0)
+
+            for p in c.parents:
+                if not hasattr(p, "_i"):
+                    pi, pj = c._i, next(J[c._i])
+                    p._i = pi
+                    p._j = pj
+                    graph[(pi, pj)] = p
+                    skip = False
+                else:
+                    skip = True
+
+                lines.append([p._i, p._j, c._i, c._j])
+
+                if not skip:
+                    queue.append(p)
+
+        self.g_width = max(next(j) for j in J)
+
+        # adapt coordinates
+        scale, shift = self.scale, self.shift
+        for l in lines:
+            l[0] += width
+            l[2] += width
+            for t in range(4):
+                l[t] = (l[t] << scale) + shift
+
+    def on_paint(self, _e):
+        dc = AutoBufferedPaintDC(self)
+        dc.Clear()
+
+        for x1, y1, x2, y2 in self.lines:
+            dc.DrawLine(x1, y1, x2, y2)
+            dc.DrawCircle(x2, y2, 4)
+
+
 class SaveMonitor(Frame):
 
     def __init__(self, saveDirVal = None, backupDirVal = None):
@@ -401,6 +516,9 @@ class SaveMonitor(Frame):
             EXPAND
         )
         backupDirSizer.Add(self.backupDir, 1, EXPAND)
+        manage = Button(self, label = "Manage")
+        self.Bind(EVT_BUTTON, self.OnManage, manage)
+        backupDirSizer.Add(manage, 0, EXPAND)
         selectBackupDir = Button(self, -1, "Select")
         self.Bind(EVT_BUTTON, self.OnSelectBackupDir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
@@ -421,6 +539,7 @@ class SaveMonitor(Frame):
             selectSaveDir,
             self.saveDir,
             self.backupDir,
+            manage,
             selectBackupDir,
             self.filterOut
         ]
@@ -434,6 +553,12 @@ class SaveMonitor(Frame):
         self.SetSizer(mainSizer)
 
         self.Bind(EVT_CLOSE, self.OnClose, self)
+
+    def OnManage(self, _):
+        backupDir = self.backupDir.GetValue()
+        if not isdir(backupDir):
+            return
+        BackupManager(self, backupDir).ShowModal()
 
     def OpenDir(self, path):
         if exists(path):
