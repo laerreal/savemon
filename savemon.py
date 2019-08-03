@@ -130,6 +130,19 @@ def open_directory_in_explorer(path):
 # Generic
 #########
 
+class lazy(tuple):
+
+    def __new__(type, getter):
+        ret = tuple.__new__(type, (getter,))
+        return ret
+
+    def __get__(self, obj, type = None):
+        getter = self[0]
+        val = getter(obj)
+        obj.__dict__[getter.__name__] = val
+        return val
+
+
 logLock = Lock()
 
 
