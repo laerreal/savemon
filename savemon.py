@@ -46,10 +46,26 @@ from sys import (
 from subprocess import (
     Popen
 )
-
+from itertools import (
+    count
+)
+from datetime import (
+    datetime
+)
 
 try:
     from wx import (
+        EVT_LEFT_UP,
+        EVT_LEFT_DOWN,
+        EVT_MOTION,
+        DEFAULT_DIALOG_STYLE,
+        RESIZE_BORDER,
+        EVT_MOUSEWHEEL,
+        EVT_SIZE,
+        EVT_PAINT,
+        AutoBufferedPaintDC, # is it cross-platform?
+        BG_STYLE_CUSTOM,
+        Dialog,
         ID_NEW,
         App,
         Frame,
@@ -66,6 +82,8 @@ try:
         DD_DEFAULT_STYLE,
         DD_DIR_MUST_EXIST,
         ID_OK,
+        ID_CANCEL,
+        ID_YES,
         MessageDialog,
         YES_NO,
         ID_NO,
@@ -90,6 +108,34 @@ except ImportError:
     print_exc()
     print("try python -m pip install --upgrade gitpython")
     exit(-1)
+
+
+class lazy(tuple):
+
+    def __new__(type, getter):
+        ret = tuple.__new__(type, (getter,))
+        return ret
+
+    def __get__(self, obj, type = None):
+        getter = self[0]
+        val = getter(obj)
+        obj.__dict__[getter.__name__] = val
+        return val
+
+    @staticmethod
+    def _test():
+        class Test(object):
+
+            @lazy
+            def test(self):
+                print("test")
+                return 1
+
+        t = Test()
+        print(t.test)
+        print(t.test)
+        print(t.test)
+
 
 # Windows
 #########
@@ -374,6 +420,336 @@ class BackUpThread(Thread):
         log("Stop backing up of '%s'" % saveDir)
 
 
+class GitGraph(object):
+
+    def __init__(self):
+        self.cache = {}
+        self.roots = None
+
+    def __getitem__(self, gitpython_commit):
+        return self.cache[gitpython_commit]
+
+    def __setitem__(self, gitpython_commit, commit):
+        self.cache[gitpython_commit] = commit
+
+    def get(self, *a, **kw):
+        return self.cache.get(*a, **kw)
+
+    def iter_commits(self):
+        visited = set()
+        stack = list(self.roots)
+        while stack:
+            c = stack.pop(0)
+            if c in visited:
+                continue
+            visited.add(c)
+            yield c
+            stack.extend(c.children)
+
+class Commit(object):
+
+    graph = GitGraph()
+
+    def __new__(type, backed, *a, **kw):
+        ret = type.graph.get(backed, None)
+        if ret is None:
+            ret = super().__new__(type)
+            ret.backed = backed
+            ret.children = []
+            type.graph[backed] = ret
+        return ret
+
+    @lazy
+    def parents(self):
+        ps = []
+        for p in self.backed.parents:
+            pc = Commit(p)
+            ps.append(pc)
+            pc.children.append(self)
+        return tuple(ps)
+
+    @lazy
+    def committed_time_str(self):
+        return self.backed.committed_datetime.strftime("%Y.%m.%d %H:%M:%S %z")
+
+    @lazy
+    def label(self):
+        return self.committed_time_str + " | " + self.backed.message
+
+
+def build_commit_graph(*heads):
+    stack = list(heads)
+    roots = []
+    visited = set()
+    while stack:
+        c = stack.pop()
+        if c in visited:
+            continue
+        visited.add(c)
+        ps = c.parents
+        if not ps:
+            roots.append(c)
+            continue
+        for p in ps:
+            p.children.append(c)
+            stack.append(p)
+
+    Commit.graph.roots = tuple(roots)
+
+backup_re = compile("backup_([0-9]+)")
+
+
+class Strip(object):
+
+    def __init__(self, c):
+        self.commits = [c]
+        start_j = c._j
+        self.start_j = start_j
+        self.end_j = start_j
+
+    def bind(self, c):
+        self.commits.append(c)
+        self.end_j = max(c._j, self.end_j)
+
+
+class BackupSelector(Dialog):
+
+    def __init__(self, parent, backupDir):
+        super(Dialog, self).__init__(parent,
+            size = (700, 500),
+            style = DEFAULT_DIALOG_STYLE | RESIZE_BORDER
+        )
+        self.SetMinSize((300, 300))
+
+        self.SetReturnCode(ID_CANCEL) # TODO: Is it really needed?
+
+        self.backupDir = backupDir
+
+        self.scale, self.shift = 4, 8
+        self.half_step = 1 << (self.scale - 1)
+        self.text_offset_x = 8
+
+        self.refresh_graph()
+
+        self.Bind(EVT_MOTION, self._on_mouse_motion)
+        self._hl = None
+
+        self.Bind(EVT_LEFT_DOWN, self._on_lmb_down)
+        self.Bind(EVT_LEFT_UP, self._on_lmb_up)
+        self._lmb = None
+
+        self.Bind(EVT_SIZE, self._on_size)
+
+        self.SetBackgroundStyle(BG_STYLE_CUSTOM)
+        self.Bind(EVT_PAINT, self._on_paint)
+
+        self._scroll = 0
+        self.height = 300
+        self.scroll = -self.current._y + self.half_step
+        self.Bind(EVT_MOUSEWHEEL, self._on_mouse_wheel)
+
+    def _on_lmb_down(self, e):
+        self._lmb = e.GetPosition()
+        e.Skip()
+
+    def _on_lmb_up(self, e):
+        lmb = self._lmb
+        if lmb is None:
+            return
+        self._lmb = None
+
+        hl = self._hl
+
+        if hl is self.current:
+            return
+
+        x0, y0 = lmb
+
+        x, y = e.GetPosition()
+        self._highlight(x, y)
+
+        if hl is None:
+            return
+
+        if max(abs(x0 - x), abs(y0 - y)) > self.half_step:
+            return
+
+        dlg = MessageDialog(self,
+            "Do you want to switch to that version?\n\n" +
+            "SHA1: %s\n\n%s" % (hl.backed.hexsha, hl.label),
+            "Confirmation is required",
+            YES_NO
+        )
+        switch = dlg.ShowModal() == ID_YES
+        dlg.Destroy()
+        if not switch:
+            return
+
+        self.target = hl.backed
+        self.SetReturnCode(ID_OK)
+        self.Destroy()
+
+    @property
+    def highlighted(self):
+        return self._hl
+
+    @highlighted.setter
+    def highlighted(self, v):
+        if v is self._hl:
+            return
+        self._hl = v
+        self.Refresh()
+
+    def _on_mouse_motion(self, e):
+        if self._lmb is None:
+            x, y = e.GetPosition()
+            self._highlight(x, y)
+
+    def _highlight(self, x, y):
+        mid = self.half_step
+        # i = (x + mid - self.shift) >> self.scale
+        # i = min(i, self.g_width - 1)
+        j = (y + mid - self.scroll - self.shift) >> self.scale
+        try:
+            c = self.index[j] # (i, j)]
+        except KeyError:
+            self.highlighted = None
+        else:
+            self.highlighted = c
+
+    @property
+    def scroll(self):
+        return self._scroll
+
+    @scroll.setter
+    def scroll(self, v):
+        scroll = max(
+            min(v, 0),
+            -self.max_scroll + self.height - self.shift
+        )
+        if scroll == self._scroll:
+            return
+        self._scroll = scroll
+        self.Refresh()
+
+    def _on_mouse_wheel(self, e):
+        self.scroll += e.GetWheelRotation()
+
+    def _on_size(self, event):
+        event.Skip()
+        self.height = self.GetClientSize()[1]
+        self.scroll = self._scroll # update scrolling
+        self.Refresh()
+
+    def refresh_graph(self):
+        try:
+            repo = Repo(self.backupDir)
+        except:
+            log("Cannot refresh backup")
+            log(format_exc())
+            return
+
+        self.repo = repo
+
+        heads = []
+
+        Commit.graph = graph = GitGraph()
+
+        for head in repo.heads:
+            c = Commit(head.commit)
+            if c in heads:
+                continue
+            heads.append(c)
+
+        build_commit_graph(*heads)
+
+        # layout commits
+        stripes = []
+        for j, c in enumerate(graph.iter_commits()):
+            c._j = j
+            parents = c.parents
+
+            for p in parents:
+                try:
+                    s = p._s
+                except AttributeError:
+                    # p's strip is already stolen by another child
+                    continue
+                else:
+                    del p._s
+                    s.bind(c)
+                    c._s = s
+                    break
+            else:
+                # No free strip or c is root
+                c._s = s = Strip(c)
+                stripes.append(s)
+
+        for i, s in enumerate(stripes):
+            for c in s.commits:
+                c._i = i
+
+        # self.g_width = i + 1
+
+        # assign coordinates
+        self.index = index = {}
+        max_j = len(graph.cache)
+        scale, shift = self.scale, self.shift
+        self.lines = lines = []
+        for c in graph.iter_commits():
+            c._x = (c._i << scale) + shift
+            # graph grows to the top
+            inv_j = max_j - c._j
+            index[inv_j] = c
+            c._y = (inv_j << scale) + shift
+            for p in c.parents:
+                lines.append([p._x, p._y, c._x, c._y])
+
+        self.max_scroll = (max_j << scale) + shift
+
+        self.current = graph[repo.active_branch.commit]
+
+    def _on_paint(self, _e):
+        scroll = self.scroll
+        text_offset_x = self.text_offset_x
+
+        dc = AutoBufferedPaintDC(self)
+        dc.Clear()
+
+        text_shift = -self.half_step
+
+        hl, cur = self._hl, self.current
+
+        for x1, y1, x2, y2 in self.lines:
+            dc.DrawLine(x1, y1 + scroll, x2, y2 + scroll)
+
+        br = dc.GetBackground()
+        prev_c = br.GetColour()
+        revert_color = False
+
+        for c in Commit.graph.iter_commits():
+            while True:
+                if c is cur:
+                    br.SetColour((0, 255, 0, 255))
+                elif c is hl:
+                    br.SetColour((255, 0, 0, 255))
+                else:
+                    break
+                dc.SetBrush(br)
+                revert_color = True
+                break
+
+            x = c._x
+            y = c._y
+
+            dc.DrawCircle(x, y + scroll, 4)
+            dc.DrawText(c.label, x + text_offset_x, y + scroll + text_shift)
+
+            if revert_color:
+                br.SetColour(prev_c)
+                dc.SetBrush(br)
+                revert_color = False
+
 class SaveSettings(object):
 
     def __init__(self, master, saveDirVal = None, backupDirVal = None):
@@ -404,6 +780,9 @@ class SaveSettings(object):
             EXPAND
         )
         backupDirSizer.Add(self.backupDir, 1, EXPAND)
+        switch = Button(master, label = "Switch")
+        master.Bind(EVT_BUTTON, self._on_switch, switch)
+        backupDirSizer.Add(switch, 0, EXPAND)
         selectBackupDir = Button(master, -1, "Select")
         master.Bind(EVT_BUTTON, self._on_select_backup_dir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
@@ -429,9 +808,88 @@ class SaveSettings(object):
             selectSaveDir,
             self.saveDir,
             self.backupDir,
+            switch,
             selectBackupDir,
             self.filterOut
         ]
+
+    def _on_switch(self, _):
+        backupDir = self.backupDir.GetValue()
+        if not isdir(backupDir):
+            return
+        with BackupSelector(self.master, backupDir) as dlg:
+            res = dlg.ShowModal()
+            if res != ID_OK:
+                return
+            target = dlg.target
+
+        try:
+            self._switch_to(target)
+        except BaseException as e:
+            with MessageDialog(self.master, str(e), "Error") as dlg:
+                dlg.ShowModal()
+
+    def _switch_to(self, target):
+        repo = Repo(self.backupDir.GetValue())
+
+        if repo.is_dirty():
+            raise RuntimeError("Backup repository is dirty")
+
+        active = repo.active_branch
+        cur = active.commit
+
+        # select name for backup branch
+        backups = []
+        need_head = True
+        for h in repo.heads:
+            mi = backup_re.match(h.name)
+            if mi:
+                backups.append(int(mi.group(1), base = 10))
+                if h.commit.hexsha == cur.hexsha:
+                    need_head = False
+
+        if backups:
+            n = max(backups) + 1
+        else:
+            n = 0
+
+        # TODO: do not set branch if commits are reachable (other
+        # branch exists)
+
+        # setup backup branch and checkout new version
+        if need_head:
+            back_head = repo.create_head("backup_%u" % n, cur)
+
+        try:
+            active.commit = target
+            try:
+                active.checkout(True)
+            except:
+                active.commit = cur
+                raise
+        except:
+            if need_head:
+                repo.delete_head(back_head)
+            raise
+
+        save_path = self.saveDir.GetValue()
+
+        # remove files of current
+        stack = [cur.tree]
+        while stack:
+            node = stack.pop()
+            for b in node.blobs:
+                remove(join(save_path, b.path))
+            stack.extend(node.trees)
+
+        # copy files from target
+        stack = [target.tree]
+        while stack:
+            node = stack.pop()
+            for b in node.blobs:
+                with open(join(save_path, b.path), "wb") as f:
+                    b.stream_data(f)
+            stack.extend(node.trees)
 
     def _open_dir(self, path):
         if exists(path):
