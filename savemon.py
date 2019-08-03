@@ -46,10 +46,25 @@ from sys import (
 from subprocess import (
     Popen
 )
+from itertools import (
+    count
+)
+from datetime import (
+    datetime
+)
 
 
 try:
     from wx import (
+        EVT_MOTION,
+        DEFAULT_DIALOG_STYLE,
+        RESIZE_BORDER,
+        EVT_MOUSEWHEEL,
+        EVT_SIZE,
+        EVT_PAINT,
+        AutoBufferedPaintDC, # is it cross-platform?
+        BG_STYLE_CUSTOM,
+        Dialog,
         ID_NEW,
         App,
         Frame,
@@ -90,6 +105,32 @@ except ImportError:
     print_exc()
     print("try python -m pip install --upgrade gitpython")
     exit(-1)
+
+
+class lazy(tuple):
+
+    def __new__(type, getter):
+        ret = tuple.__new__(type, (getter,))
+        return ret
+
+    def __get__(self, obj, type = None):
+        getter = self[0]
+        val = getter(obj)
+        obj.__dict__[getter.__name__] = val
+        return val
+
+"""
+class Test(object):
+
+    @lazy
+    def test(self):
+        return 1
+
+t = Test()
+print(t.test)
+print(t.test)
+print(t.test)
+"""
 
 # Windows
 #########
@@ -374,6 +415,204 @@ class BackUpThread(Thread):
         log("Stop backing up of '%s'" % saveDir)
 
 
+class Commit(object):
+
+    cache = {}
+
+    def __new__(type, backed, *a, **kw):
+        ret = type.cache.get(backed, None)
+        if ret is None:
+            ret = super().__new__(type)
+            ret.backed = backed
+            ret._parents = None
+            type.cache[backed] = ret
+        return ret
+
+    @lazy
+    def parents(self):
+        ps = self._parents
+        if ps is None:
+            ps = []
+            for p in self.backed.parents:
+                pc = Commit(p)
+                ps.append(pc)
+            self._parents = ps
+        return ps
+
+    @lazy
+    def committed_time_str(self):
+        return self.backed.committed_datetime.strftime("%Y.%m.%d %H:%M:%S %z")
+
+    @lazy
+    def label(self):
+        return self.committed_time_str + " | " + self.backed.message
+
+
+class BackupManager(Dialog):
+
+    def __init__(self, parent, backupDir):
+        super(Dialog, self).__init__(parent,
+            size = (700, 500),
+            style = DEFAULT_DIALOG_STYLE | RESIZE_BORDER
+        )
+        self.SetMinSize((300, 300))
+
+        self.backupDir = backupDir
+        self.scale, self.shift = 4, 8
+        self.text_offset_x = 8
+        self.refresh_graph()
+
+        self.Bind(EVT_SIZE, self._on_size)
+        self.SetBackgroundStyle(BG_STYLE_CUSTOM)
+        self.Bind(EVT_PAINT, self._on_paint)
+
+        self.Bind(EVT_MOUSEWHEEL, self._on_mouse_wheel)
+
+        self.Bind(EVT_MOTION, self._on_mouse_motion)
+
+        self.scroll = 0
+
+        self._hl = None
+
+    @property
+    def highlighted(self):
+        return self._hl
+
+    @highlighted.setter
+    def highlighted(self, v):
+        if v is self._hl:
+            return
+        self._hl = v
+        self.Refresh()
+
+    def _on_mouse_motion(self, e):
+        x, y = e.GetPosition()
+        mid = 1 << (self.scale - 1)
+        i = (x + mid - self.shift) >> self.scale
+        i = min(i, self.g_width - 1)
+        j = (y + mid - self.scroll - self.shift) >> self.scale
+        try:
+            c = self.graph[(i, j)]
+        except KeyError:
+            self.highlighted = None
+        else:
+            self.highlighted = c
+
+    def _on_mouse_wheel(self, e):
+        r = e.GetWheelRotation()
+        self.scroll = max(
+            min(self.scroll + r, 0),
+            -self.max_scroll + self.height - self.shift
+        )
+        self.Refresh()
+
+    def _on_size(self, event):
+        self.height = self.GetClientSize()[1]
+        event.Skip()
+        self.Refresh()
+
+    def refresh_graph(self):
+        try:
+            repo = Repo(self.backupDir)
+        except:
+            log("Cannot refresh backup")
+            log(format_exc())
+            return
+
+        queue = []
+
+        Commit.cache = cache = {}
+        self.graph = graph = {}
+
+        i = -1 # empty repo
+        for i, head in enumerate(repo.heads):
+            c = Commit(head.commit)
+            c._i = i
+            c._j = i # 0
+            queue.append(c)
+            graph[(c._i, c._j)] = c
+
+        self.g_width = i + 1
+
+        self.lines = lines = []
+
+        # J = list(count(1) for _ in range(width)
+        J = count(self.g_width)
+
+        while queue:
+            c = queue.pop(0)
+
+            parents = c.parents
+
+            if parents:
+                for p in c.parents:
+                    if not hasattr(p, "_i"):
+                        pi, pj = c._i, next(J) # next(J[c._i])
+                        p._i = pi
+                        p._j = pj
+                        graph[(pi, pj)] = p
+                        skip = False
+                    else:
+                        skip = True
+
+                    lines.append([p._i, p._j, c._i, c._j, c])
+
+                    if not skip:
+                        queue.append(p)
+            else: # root
+                lines.append([c._i, c._j, c._i, c._j, c])
+
+        # adapt coordinates
+        scale, shift = self.scale, self.shift
+        max_scroll = 0
+        for l in lines:
+            for t in range(4):
+                l[t] = (l[t] << scale) + shift
+
+            if max_scroll < l[1]:
+                max_scroll = l[1]
+
+        self.max_scroll = max_scroll
+
+        self.current = cache[repo.head.commit]
+
+    def _on_paint(self, _e):
+        scroll = self.scroll
+        text_offset_x = self.text_offset_x
+
+        dc = AutoBufferedPaintDC(self)
+        dc.Clear()
+
+        text_shift = -(1 << (self.scale - 1))
+
+        hl, cur = self._hl, self.current
+
+        br = dc.GetBackground()
+        prev_c = br.GetColour()
+        revert_color = False
+
+        for x1, y1, x2, y2, c in self.lines:
+            while True:
+                if c is cur:
+                    br.SetColour((0, 255, 0, 255))
+                elif c is hl:
+                    br.SetColour((255, 0, 0, 255))
+                else:
+                    break
+                dc.SetBrush(br)
+                revert_color = True
+                break
+
+            dc.DrawLine(x1, y1 + scroll, x2, y2 + scroll)
+            dc.DrawCircle(x2, y2 + scroll, 4)
+            # XXX: do something with overlapping
+            dc.DrawText(c.label, x1 + text_offset_x, y2 + scroll + text_shift)
+
+            if revert_color:
+                br.SetColour(prev_c)
+                dc.SetBrush(br)
+                revert_color = False
+
 class SaveSettings(object):
 
     def __init__(self, master, saveDirVal = None, backupDirVal = None):
@@ -404,6 +643,9 @@ class SaveSettings(object):
             EXPAND
         )
         backupDirSizer.Add(self.backupDir, 1, EXPAND)
+        manage = Button(master, label = "Manage")
+        master.Bind(EVT_BUTTON, self._on_manage, manage)
+        backupDirSizer.Add(manage, 0, EXPAND)
         selectBackupDir = Button(master, -1, "Select")
         master.Bind(EVT_BUTTON, self._on_select_backup_dir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
@@ -429,9 +671,16 @@ class SaveSettings(object):
             selectSaveDir,
             self.saveDir,
             self.backupDir,
+            manage,
             selectBackupDir,
             self.filterOut
         ]
+
+    def _on_manage(self, _):
+        backupDir = self.backupDir.GetValue()
+        if not isdir(backupDir):
+            return
+        BackupManager(self.master, backupDir).ShowModal()
 
     def _open_dir(self, path):
         if exists(path):
