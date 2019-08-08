@@ -4,7 +4,17 @@
 
 The utility is designed to watch a directory with save data of a game and
 automatically back the data up.
-The files are backed-up with a delay after changes have been detected.
+
+## Updates
+
+_Screenshot is outdated._
+
+* Buttons to open both save & backup directories in the file explorer.
+* Support multiple backup settings (`File` -> `Add`).
+
+## Description
+
+Save data files are backed-up with a delay after changes have been detected.
 I.e. it may happen many times during game runtime.
 
 Backed-up data is under [Git](https://git-scm.com/about) Version Control
@@ -16,6 +26,10 @@ tools to access previous file versions
 (ex. [TortoiseGit](https://tortoisegit.org/download) for Windows)
 
 It's Windows-only (for now).
+
+The utility's settings are stored in user directory in file
+`savemon.settings.py`.
+E.g.: `C:\Users\Vasya\savemon.settings.py`.
 
 ## How to (Windows)
 
