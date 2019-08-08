@@ -359,63 +359,56 @@ class BackUpThread(Thread):
         log("Stop backing up of '%s'" % saveDir)
 
 
-class SaveMonitor(Frame):
+class SaveSettings(object):
 
-    def __init__(self, saveDirVal = None, backupDirVal = None):
-        super(SaveMonitor, self).__init__(None,
-            title = "Game Save Monitor"
-        )
-
-        menuBar = MenuBar()
-
-        aboutMenu = Menu()
-        aboutItem = aboutMenu.Append(ID_ABOUT,
-            "&About", "Information about this program"
-        )
-        self.Bind(EVT_MENU, self.OnAbout, aboutItem)
-        menuBar.Append(aboutMenu, "&About")
-
-        self.SetMenuBar(menuBar)
+    def __init__(self, master, saveDirVal = None, backupDirVal = None):
+        self.master = master
 
         saveDirSizer = BoxSizer(HORIZONTAL)
-        self.saveDir = TextCtrl(self,
+        self.saveDir = TextCtrl(master,
             size = (600, -1)
         )
         if saveDirVal:
             self.saveDir.SetValue(saveDirVal)
-        saveDirSizer.Add(StaticText(self, label = "Save directory"), 0, EXPAND)
+        saveDirSizer.Add(StaticText(master, label = "Save directory"), 0,
+            EXPAND
+        )
         saveDirSizer.Add(self.saveDir, 1, EXPAND)
-        selectSaveDir = Button(self, -1, "Select")
+        selectSaveDir = Button(master, -1, "Select")
         saveDirSizer.Add(selectSaveDir, 0, EXPAND)
-        self.Bind(EVT_BUTTON, self.OnSelectSaveDir, selectSaveDir)
-        openSave = Button(self, label = "Open")
+        master.Bind(EVT_BUTTON, self.OnSelectSaveDir, selectSaveDir)
+        openSave = Button(master, label = "Open")
         saveDirSizer.Add(openSave, 0, EXPAND)
-        self.Bind(EVT_BUTTON, self.OnOpenSaveDir, openSave)
-
+        master.Bind(EVT_BUTTON, self.OnOpenSaveDir, openSave)
 
         backupDirSizer = BoxSizer(HORIZONTAL)
-        self.backupDir = TextCtrl(self)
+        self.backupDir = TextCtrl(master)
         if backupDirVal:
             self.backupDir.SetValue(backupDirVal)
-        backupDirSizer.Add(StaticText(self, label = "Backup directory"), 0,
+        backupDirSizer.Add(StaticText(master, label = "Backup directory"), 0,
             EXPAND
         )
         backupDirSizer.Add(self.backupDir, 1, EXPAND)
-        selectBackupDir = Button(self, -1, "Select")
-        self.Bind(EVT_BUTTON, self.OnSelectBackupDir, selectBackupDir)
+        selectBackupDir = Button(master, -1, "Select")
+        master.Bind(EVT_BUTTON, self.OnSelectBackupDir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
-        openBackup = Button(self, label = "Open")
+        openBackup = Button(master, label = "Open")
         backupDirSizer.Add(openBackup, 0, EXPAND)
-        self.Bind(EVT_BUTTON, self.OnOpenBackupDir, openBackup)
+        master.Bind(EVT_BUTTON, self.OnOpenBackupDir, openBackup)
 
         filterOutSizer = BoxSizer(HORIZONTAL)
-        filterOutSizer.Add(StaticText(self, label = "Filter Out"), 0, EXPAND)
-        self.filterOut = TextCtrl(self)
+        filterOutSizer.Add(StaticText(master, label = "Filter Out"), 0, EXPAND)
+        self.filterOut = TextCtrl(master)
         filterOutSizer.Add(self.filterOut, 1, EXPAND)
 
-        self.cbMonitor = CheckBox(self, label = "Monitor")
-        self.root2threads = {}
-        self.Bind(EVT_CHECKBOX, self.OnMonitor, self.cbMonitor)
+        self.cbMonitor = CheckBox(master, label = "Monitor")
+        master.Bind(EVT_CHECKBOX, self.OnMonitor, self.cbMonitor)
+
+        self.sizer = sizer = BoxSizer(VERTICAL)
+        sizer.Add(saveDirSizer, 0, EXPAND)
+        sizer.Add(backupDirSizer, 0, EXPAND)
+        sizer.Add(filterOutSizer, 0, EXPAND)
+        sizer.Add(self.cbMonitor, 0, EXPAND)
 
         self.settingsWidgets = [
             selectSaveDir,
@@ -424,16 +417,6 @@ class SaveMonitor(Frame):
             selectBackupDir,
             self.filterOut
         ]
-
-        mainSizer = BoxSizer(VERTICAL)
-        mainSizer.Add(saveDirSizer, 0, EXPAND)
-        mainSizer.Add(backupDirSizer, 0, EXPAND)
-        mainSizer.Add(filterOutSizer, 0, EXPAND)
-        mainSizer.Add(self.cbMonitor, 0, EXPAND)
-        mainSizer.SetSizeHints(self)
-        self.SetSizer(mainSizer)
-
-        self.Bind(EVT_CLOSE, self.OnClose, self)
 
     def OpenDir(self, path):
         if exists(path):
@@ -447,7 +430,8 @@ class SaveMonitor(Frame):
 
     def OnSelectSaveDir(self, _):
         if not hasattr(self, "dlgSaveDir"):
-            self.dlgSaveDir = DirDialog(self, "Choose directory of save data",
+            self.dlgSaveDir = DirDialog(self.master,
+                "Choose directory of save data",
                 "", DD_DEFAULT_STYLE | DD_DIR_MUST_EXIST
             )
 
@@ -460,7 +444,8 @@ class SaveMonitor(Frame):
 
     def OnSelectBackupDir(self, _):
         if not hasattr(self, "dlgBackupDir"):
-            self.dlgBackupDir = DirDialog(self, "Choose directory for backup",
+            self.dlgBackupDir = DirDialog(self.master,
+                "Choose directory for backup",
                 "", DD_DEFAULT_STYLE | DD_DIR_MUST_EXIST
             )
 
@@ -482,13 +467,14 @@ class SaveMonitor(Frame):
     def OnMonitor(self, _):
         root = self.saveDir.GetValue()
         backup = self.backupDir.GetValue()
+        root2threads = self.master.root2threads
 
         # See: http://timgolden.me.uk/python/win32_how_do_i/watch_directory_for_changes.html
         if self.cbMonitor.IsChecked():
             self.DisableSettings()
 
             if not root:
-                dlg = MessageDialog(self, "Pleas select save directory",
+                dlg = MessageDialog(self.master, "Pleas select save directory",
                     "Error"
                 )
                 dlg.ShowModal()
@@ -497,7 +483,8 @@ class SaveMonitor(Frame):
                 self.EnableSettings()
                 return
             if not backup:
-                dlg = MessageDialog(self, "Pleas select backup directory",
+                dlg = MessageDialog(self.master,
+                    "Pleas select backup directory",
                     "Error"
                 )
                 dlg.ShowModal()
@@ -505,7 +492,7 @@ class SaveMonitor(Frame):
                 self.cbMonitor.SetValue(False)
                 self.EnableSettings()
                 return
-            if root in self.root2threads:
+            if root in root2threads:
                 return # already monitored
 
             filterOutRe = None
@@ -515,7 +502,8 @@ class SaveMonitor(Frame):
                     filterOutRe = compile(filterOut)
                 except:
                     if filterOut:
-                        dlg = MessageDialog(self, "Incorrect filter expression"
+                        dlg = MessageDialog(self.master,
+                                "Incorrect filter expression"
                                 " (use Python's re syntax)\n" + format_exc() +
                                 "\nContinue without filter?",
                             "Filter Out Error",
@@ -528,28 +516,72 @@ class SaveMonitor(Frame):
                             self.EnableSettings()
                             return
 
-            mt = MonitorThread(root, lambda : self.root2threads.pop(root))
+            mt = MonitorThread(root, lambda : root2threads.pop(root))
             bt = BackUpThread(root, backup, mt.changes, filterOutRe)
-            self.root2threads[root] = (mt, bt)
+            root2threads[root] = (mt, bt)
             mt.start()
             bt.start()
         else:
             self.EnableSettings()
 
-            if root in self.root2threads:
-                for t in self.root2threads[root]:
+            if root in root2threads:
+                for t in root2threads[root]:
                     t.exit_request = True
+
+    @property
+    def saveData(self):
+        return (
+            self.saveDir.GetValue(),
+            self.backupDir.GetValue(),
+            self.filterOut.GetValue(),
+        )
+
+
+class SaveMonitor(Frame):
+
+    def __init__(self):
+        super(SaveMonitor, self).__init__(None,
+            title = "Game Save Monitor"
+        )
+
+        menuBar = MenuBar()
+
+        aboutMenu = Menu()
+        aboutItem = aboutMenu.Append(ID_ABOUT,
+            "&About", "Information about this program"
+        )
+        self.Bind(EVT_MENU, self.OnAbout, aboutItem)
+        menuBar.Append(aboutMenu, "&About")
+
+        self.SetMenuBar(menuBar)
+
+        self.root2threads = {}
+        self.settings = []
+
+        self.mainSizer = mainSizer = BoxSizer(VERTICAL)
+
+        mainSizer.SetSizeHints(self)
+        self.SetSizer(mainSizer)
+
+        self.Bind(EVT_CLOSE, self.OnClose, self)
+
+    def add_settings(self, saveDirVal, backupDirVal, filterOutVal = None):
+        settings = SaveSettings(self,
+            saveDirVal = saveDirVal,
+            backupDirVal = backupDirVal
+        )
+        if filterOutVal is not None:
+            settings.filterOut.SetValue(filterOutVal)
+        self.settings.append(settings)
+        self.mainSizer.Add(settings.sizer, 0, EXPAND)
+        self.mainSizer.SetSizeHints(self)
 
     def OnClose(self, e):
         for threads in list(self.root2threads.values()):
             for t in threads:
                 t.exit_request = True
 
-        self.saveData = (
-            self.saveDir.GetValue(),
-            self.backupDir.GetValue(),
-            self.filterOut.GetValue(),
-        )
+        self.saveData = [s.saveData for s in self.settings]
         e.Skip()
 
     def OnAbout(self, _):
@@ -568,21 +600,16 @@ def main():
     app = App()
 
     with Settings() as s:
-        mons = []
+        mon = SaveMonitor()
         for save in s.saves:
-            mon = SaveMonitor(saveDirVal = save[0], backupDirVal = save[1])
-            mon.filterOut.SetValue(save[2])
-            mons.append(mon)
+            mon.add_settings(*save)
 
-        if not s.saves:
-            mons.append(SaveMonitor())
-
-        [m.Show(True) for m in mons]
+        mon.Show(True)
 
         app.MainLoop()
-        del s.saves[:]
-        for mon in mons:
-            s.saves.append(mon.saveData)
+
+        s.saves[:] = mon.saveData
+
 
 if __name__ == "__main__":
     main()
