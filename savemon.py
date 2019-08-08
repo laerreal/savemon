@@ -376,10 +376,10 @@ class SaveSettings(object):
         saveDirSizer.Add(self.saveDir, 1, EXPAND)
         selectSaveDir = Button(master, -1, "Select")
         saveDirSizer.Add(selectSaveDir, 0, EXPAND)
-        master.Bind(EVT_BUTTON, self.OnSelectSaveDir, selectSaveDir)
+        master.Bind(EVT_BUTTON, self._on_select_save_dir, selectSaveDir)
         openSave = Button(master, label = "Open")
         saveDirSizer.Add(openSave, 0, EXPAND)
-        master.Bind(EVT_BUTTON, self.OnOpenSaveDir, openSave)
+        master.Bind(EVT_BUTTON, self._on_open_save_dir, openSave)
 
         backupDirSizer = BoxSizer(HORIZONTAL)
         self.backupDir = TextCtrl(master)
@@ -390,11 +390,11 @@ class SaveSettings(object):
         )
         backupDirSizer.Add(self.backupDir, 1, EXPAND)
         selectBackupDir = Button(master, -1, "Select")
-        master.Bind(EVT_BUTTON, self.OnSelectBackupDir, selectBackupDir)
+        master.Bind(EVT_BUTTON, self._on_select_backup_dir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
         openBackup = Button(master, label = "Open")
         backupDirSizer.Add(openBackup, 0, EXPAND)
-        master.Bind(EVT_BUTTON, self.OnOpenBackupDir, openBackup)
+        master.Bind(EVT_BUTTON, self._on_open_backup_dir, openBackup)
 
         filterOutSizer = BoxSizer(HORIZONTAL)
         filterOutSizer.Add(StaticText(master, label = "Filter Out"), 0, EXPAND)
@@ -402,7 +402,7 @@ class SaveSettings(object):
         filterOutSizer.Add(self.filterOut, 1, EXPAND)
 
         self.cbMonitor = CheckBox(master, label = "Monitor")
-        master.Bind(EVT_CHECKBOX, self.OnMonitor, self.cbMonitor)
+        master.Bind(EVT_CHECKBOX, self._on_monitor, self.cbMonitor)
 
         self.sizer = sizer = BoxSizer(VERTICAL)
         sizer.Add(saveDirSizer, 0, EXPAND)
@@ -418,17 +418,17 @@ class SaveSettings(object):
             self.filterOut
         ]
 
-    def OpenDir(self, path):
+    def _open_dir(self, path):
         if exists(path):
             open_directory_in_explorer(path)
 
-    def OnOpenSaveDir(self, _):
-        self.OpenDir(self.saveDir.GetValue())
+    def _on_open_save_dir(self, _):
+        self._open_dir(self.saveDir.GetValue())
 
-    def OnOpenBackupDir(self, _):
-        self.OpenDir(self.backupDir.GetValue())
+    def _on_open_backup_dir(self, _):
+        self._open_dir(self.backupDir.GetValue())
 
-    def OnSelectSaveDir(self, _):
+    def _on_select_save_dir(self, _):
         if not hasattr(self, "dlgSaveDir"):
             self.dlgSaveDir = DirDialog(self.master,
                 "Choose directory of save data",
@@ -442,7 +442,7 @@ class SaveSettings(object):
         if self.dlgSaveDir.ShowModal() == ID_OK:
             self.saveDir.SetValue(self.dlgSaveDir.GetPath())
 
-    def OnSelectBackupDir(self, _):
+    def _on_select_backup_dir(self, _):
         if not hasattr(self, "dlgBackupDir"):
             self.dlgBackupDir = DirDialog(self.master,
                 "Choose directory for backup",
@@ -456,22 +456,22 @@ class SaveSettings(object):
         if self.dlgBackupDir.ShowModal() == ID_OK:
             self.backupDir.SetValue(self.dlgBackupDir.GetPath())
 
-    def EnableSettings(self):
+    def _enable_settings(self):
         for w in self.settingsWidgets:
             w.Enable(True)
 
-    def DisableSettings(self):
+    def _disable_settings(self):
         for w in self.settingsWidgets:
             w.Enable(False)
 
-    def OnMonitor(self, _):
+    def _on_monitor(self, _):
         root = self.saveDir.GetValue()
         backup = self.backupDir.GetValue()
         root2threads = self.master.root2threads
 
         # See: http://timgolden.me.uk/python/win32_how_do_i/watch_directory_for_changes.html
         if self.cbMonitor.IsChecked():
-            self.DisableSettings()
+            self._disable_settings()
 
             if not root:
                 dlg = MessageDialog(self.master, "Pleas select save directory",
@@ -480,7 +480,7 @@ class SaveSettings(object):
                 dlg.ShowModal()
                 dlg.Destroy()
                 self.cbMonitor.SetValue(False)
-                self.EnableSettings()
+                self._enable_settings()
                 return
             if not backup:
                 dlg = MessageDialog(self.master,
@@ -490,7 +490,7 @@ class SaveSettings(object):
                 dlg.ShowModal()
                 dlg.Destroy()
                 self.cbMonitor.SetValue(False)
-                self.EnableSettings()
+                self._enable_settings()
                 return
             if root in root2threads:
                 return # already monitored
@@ -513,7 +513,7 @@ class SaveSettings(object):
                         dlg.Destroy()
                         if res == ID_NO:
                             self.cbMonitor.SetValue(False)
-                            self.EnableSettings()
+                            self._enable_settings()
                             return
 
             mt = MonitorThread(root, lambda : root2threads.pop(root))
@@ -522,7 +522,7 @@ class SaveSettings(object):
             mt.start()
             bt.start()
         else:
-            self.EnableSettings()
+            self._enable_settings()
 
             if root in root2threads:
                 for t in root2threads[root]:
@@ -550,7 +550,7 @@ class SaveMonitor(Frame):
         aboutItem = aboutMenu.Append(ID_ABOUT,
             "&About", "Information about this program"
         )
-        self.Bind(EVT_MENU, self.OnAbout, aboutItem)
+        self.Bind(EVT_MENU, self._on_about, aboutItem)
         menuBar.Append(aboutMenu, "&About")
 
         self.SetMenuBar(menuBar)
@@ -563,7 +563,7 @@ class SaveMonitor(Frame):
         mainSizer.SetSizeHints(self)
         self.SetSizer(mainSizer)
 
-        self.Bind(EVT_CLOSE, self.OnClose, self)
+        self.Bind(EVT_CLOSE, self._on_close, self)
 
     def add_settings(self, saveDirVal, backupDirVal, filterOutVal = None):
         settings = SaveSettings(self,
@@ -576,7 +576,7 @@ class SaveMonitor(Frame):
         self.mainSizer.Add(settings.sizer, 0, EXPAND)
         self.mainSizer.SetSizeHints(self)
 
-    def OnClose(self, e):
+    def _on_close(self, e):
         for threads in list(self.root2threads.values()):
             for t in threads:
                 t.exit_request = True
@@ -584,7 +584,7 @@ class SaveMonitor(Frame):
         self.saveData = [s.saveData for s in self.settings]
         e.Skip()
 
-    def OnAbout(self, _):
+    def _on_about(self, _):
         dlg = MessageDialog(self, "Monitors save directory and backs up"
                 " changes to backup directory. Backup directory is under Git"
                 " version control system.\n"
