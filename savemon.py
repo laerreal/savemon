@@ -46,6 +46,7 @@ from subprocess import (
 
 try:
     from wx import (
+        ID_NEW,
         App,
         Frame,
         EVT_CLOSE,
@@ -546,6 +547,13 @@ class SaveMonitor(Frame):
 
         menuBar = MenuBar()
 
+        fileMenu = Menu()
+        addItem = fileMenu.Append(ID_NEW, "&Add",
+            "Add save data backup settings"
+        )
+        self.Bind(EVT_MENU, self._on_add, addItem)
+        menuBar.Append(fileMenu, "&File")
+
         aboutMenu = Menu()
         aboutItem = aboutMenu.Append(ID_ABOUT,
             "&About", "Information about this program"
@@ -565,6 +573,9 @@ class SaveMonitor(Frame):
 
         self.Bind(EVT_CLOSE, self._on_close, self)
 
+    def _on_add(self, _):
+        self._add_settings(SaveSettings(self))
+
     def add_settings(self, saveDirVal, backupDirVal, filterOutVal = None):
         settings = SaveSettings(self,
             saveDirVal = saveDirVal,
@@ -572,6 +583,9 @@ class SaveMonitor(Frame):
         )
         if filterOutVal is not None:
             settings.filterOut.SetValue(filterOutVal)
+        self._add_settings(settings)
+
+    def _add_settings(self, settings):
         self.settings.append(settings)
         self.mainSizer.Add(settings.sizer, 0, EXPAND)
         self.mainSizer.SetSizeHints(self)
