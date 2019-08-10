@@ -5,12 +5,13 @@
 The utility is designed to watch a directory with save data of a game and
 automatically back the data up.
 
-## Updates
+## Recent updates
 
 _Screenshot is outdated._
 
-* Buttons to open both save & backup directories in the file explorer.
-* Support multiple backup settings (`File` -> `Add`).
+### 2019.08.10
+
+* fixup failure when a directory is created at runtime
 
 ## Description
 
@@ -50,3 +51,10 @@ backed up files.
 4. Launch `savemon.py`.
 Python normally integrates to file explorer during installation to
 allow launching scripts on double click.
+
+## History
+
+### 2019.08.08
+
+* Buttons to open both save & backup directories in the file explorer.
+* Support multiple backup settings (`File` -> `Add`).

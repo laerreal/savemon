@@ -1,4 +1,5 @@
 from os.path import (
+    dirname,
     exists,
     join,
     expanduser,
@@ -339,12 +340,22 @@ class BackUpThread(Thread):
                 # give game a chance to made save data consistent
                 t = time()
                 if changes and t - lastChange > 5.0:
+                    # ensure a directory are always precede its files
+                    toCheck = sorted(changes, key = lambda c : len(c[1]))
+
                     log("Checking\n    %s" % "\n    ".join(
-                        c[1] for c in changes)
+                        c[1] for c in toCheck)
                     )
-                    for c in changes:
+                    for c in toCheck:
                         cur = c[1]
-                        self.check(cur)
+                        fullN = join(self.saveDir, cur)
+                        if isdir(fullN):
+                            fullBackN = join(self.backupDir, cur)
+                            if not exists(fullBackN):
+                                log("Creating directory '%s'" % fullBackN)
+                                mkdir(fullBackN)
+                        else:
+                            self.check(cur)
 
                     changes.clear()
                     self.commit()
