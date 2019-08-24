@@ -1,3 +1,6 @@
+from os import (
+    makedirs
+)
 from os.path import (
     dirname,
     exists,
@@ -516,6 +519,21 @@ class SaveSettings(object):
                 return
             if root in root2threads:
                 return # already monitored
+
+            if not exists(backup):
+                dlg = MessageDialog(self.master,
+                    "Directory '%s' does not exist. Create?" % backup,
+                    "Create backup directory",
+                    YES_NO
+                )
+                res = dlg.ShowModal()
+                dlg.Destroy()
+                if not res:
+                    self.cbMonitor.SetValue(False)
+                    self._enable_settings()
+                    return
+
+                makedirs(backup)
 
             filterOutRe = None
             filterOut = self.filterOut.GetValue()
