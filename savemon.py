@@ -494,6 +494,16 @@ class SaveSettings(object):
                 self.cbMonitor.SetValue(False)
                 self._enable_settings()
                 return
+            if not exists(root):
+                dlg = MessageDialog(self.master,
+                    "No such directory '%s'" % root,
+                    "Error"
+                )
+                dlg.ShowModal()
+                dlg.Destroy()
+                self.cbMonitor.SetValue(False)
+                self._enable_settings()
+                return
             if not backup:
                 dlg = MessageDialog(self.master,
                     "Pleas select backup directory",
