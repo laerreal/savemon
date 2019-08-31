@@ -7,7 +7,9 @@ automatically back the data up.
 
 ## Recent updates
 
-_Screenshot is outdated._
+### 2019.08.31
+
+* switching between backup versions
 
 ### 2019.08.10
 
@@ -22,6 +24,13 @@ Backed-up data is under [Git](https://git-scm.com/about) Version Control
 System.
 So, the last version of backed files is always available in backup
 directory.
+
+Use "Switch" button to revert to a previous version of the save data.
+Current version will also be accessible for switch back.
+Files in the save directory are automatically replaced.
+
+![Switch window screenshot](/docs/switch_window.png)
+
 Also, there are [many](https://git-scm.com/downloads/guis) free/open source
 tools to access previous file versions
 (ex. [TortoiseGit](https://tortoisegit.org/download) for Windows)
