@@ -56,15 +56,20 @@ try:
         PostEvent,
         EVT_SCROLL,
         EVT_ENTER_WINDOW,
+        ScrollBar,
+        SB_VERTICAL,
         Control,
         EVT_LEFT_UP,
         EVT_LEFT_DOWN,
         EVT_MOTION,
+        DEFAULT_DIALOG_STYLE,
+        RESIZE_BORDER,
         EVT_MOUSEWHEEL,
         EVT_SIZE,
         EVT_PAINT,
         AutoBufferedPaintDC, # is it cross-platform?
         BG_STYLE_CUSTOM,
+        Dialog,
         ID_NEW,
         App,
         Frame,
@@ -81,6 +86,8 @@ try:
         DD_DEFAULT_STYLE,
         DD_DIR_MUST_EXIST,
         ID_OK,
+        ID_CANCEL,
+        ID_YES,
         MessageDialog,
         YES_NO,
         ID_NO,
@@ -758,6 +765,47 @@ class GitSelector(Control):
         self.SetFocus()
 
 
+class BackupSelector(Dialog):
+
+    def __init__(self, parent, backupDir):
+        super(Dialog, self).__init__(parent,
+            style = DEFAULT_DIALOG_STYLE | RESIZE_BORDER
+        )
+        self.SetMinSize((300, 300))
+
+        sizer = BoxSizer(HORIZONTAL)
+
+        selector = GitSelector(self, backupDir, size = (700, 500))
+        sizer.Add(selector, 1, EXPAND)
+
+        scrollbar = ScrollBar(self, style = SB_VERTICAL)
+        selector.scrollbar = scrollbar
+        sizer.Add(scrollbar, 0, EXPAND)
+
+        sizer.SetSizeHints(self)
+        self.SetSizer(sizer)
+
+        selector.Bind(EVT_COMMIT_SELECTED, self._on_commit_selected)
+
+    def _on_commit_selected(self, e):
+        c = e.commit
+
+        dlg = MessageDialog(self,
+            "Do you want to switch to that version?\n\n" +
+            "SHA1: %s\n\n%s\n\n" % (c.backed.hexsha, c.label) +
+            "Files in both save and backup directories will be overwritten!",
+            "Confirmation is required",
+            YES_NO
+        )
+        switch = dlg.ShowModal() == ID_YES
+        dlg.Destroy()
+        if not switch:
+            return
+
+        self.target = c.backed
+        self.EndModal(ID_OK)
+
+
 class SaveSettings(object):
 
     def __init__(self, master, saveDirVal = None, backupDirVal = None):
@@ -788,6 +836,9 @@ class SaveSettings(object):
             EXPAND
         )
         backupDirSizer.Add(self.backupDir, 1, EXPAND)
+        switch = Button(master, label = "Switch")
+        master.Bind(EVT_BUTTON, self._on_switch, switch)
+        backupDirSizer.Add(switch, 0, EXPAND)
         selectBackupDir = Button(master, -1, "Select")
         master.Bind(EVT_BUTTON, self._on_select_backup_dir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
@@ -813,9 +864,88 @@ class SaveSettings(object):
             selectSaveDir,
             self.saveDir,
             self.backupDir,
+            switch,
             selectBackupDir,
             self.filterOut
         ]
+
+    def _on_switch(self, _):
+        backupDir = self.backupDir.GetValue()
+        if not isdir(backupDir):
+            return
+        with BackupSelector(self.master, backupDir) as dlg:
+            res = dlg.ShowModal()
+            if res != ID_OK:
+                return
+            target = dlg.target
+
+        try:
+            self._switch_to(target)
+        except BaseException as e:
+            with MessageDialog(self.master, str(e), "Error") as dlg:
+                dlg.ShowModal()
+
+    def _switch_to(self, target):
+        repo = Repo(self.backupDir.GetValue())
+
+        if repo.is_dirty():
+            raise RuntimeError("Backup repository is dirty")
+
+        active = repo.active_branch
+        cur = active.commit
+
+        # select name for backup branch
+        backups = []
+        need_head = True
+        for h in repo.heads:
+            mi = backup_re.match(h.name)
+            if mi:
+                backups.append(int(mi.group(1), base = 10))
+                if h.commit.hexsha == cur.hexsha:
+                    need_head = False
+
+        if backups:
+            n = max(backups) + 1
+        else:
+            n = 0
+
+        # TODO: do not set branch if commits are reachable (other
+        # branch exists)
+
+        # setup backup branch and checkout new version
+        if need_head:
+            back_head = repo.create_head("backup_%u" % n, cur)
+
+        try:
+            active.commit = target
+            try:
+                active.checkout(True)
+            except:
+                active.commit = cur
+                raise
+        except:
+            if need_head:
+                repo.delete_head(back_head)
+            raise
+
+        save_path = self.saveDir.GetValue()
+
+        # remove files of current
+        stack = [cur.tree]
+        while stack:
+            node = stack.pop()
+            for b in node.blobs:
+                remove(join(save_path, b.path))
+            stack.extend(node.trees)
+
+        # copy files from target
+        stack = [target.tree]
+        while stack:
+            node = stack.pop()
+            for b in node.blobs:
+                with open(join(save_path, b.path), "wb") as f:
+                    b.stream_data(f)
+            stack.extend(node.trees)
 
     def _open_dir(self, path):
         if exists(path):
