@@ -46,6 +46,9 @@ from sys import (
 from subprocess import (
     Popen
 )
+from datetime import (
+    datetime
+)
 
 
 try:
@@ -386,6 +389,82 @@ class BackUpThread(Thread):
 
         log("Stop backing up of '%s'" % saveDir)
 
+
+class GitGraph(object):
+
+    def __init__(self):
+        self.cache = {}
+        self.roots = None
+
+    def __getitem__(self, gitpython_commit):
+        return self.cache[gitpython_commit]
+
+    def __setitem__(self, gitpython_commit, commit):
+        self.cache[gitpython_commit] = commit
+
+    def get(self, *a, **kw):
+        return self.cache.get(*a, **kw)
+
+    def iter_commits(self):
+        visited = set()
+        stack = list(self.roots)
+        while stack:
+            c = stack.pop(0)
+            if c in visited:
+                continue
+            visited.add(c)
+            yield c
+            stack.extend(c.children)
+
+class Commit(object):
+
+    graph = GitGraph()
+
+    def __new__(type, backed, *a, **kw):
+        ret = type.graph.get(backed, None)
+        if ret is None:
+            ret = super().__new__(type)
+            ret.backed = backed
+            ret.children = []
+            type.graph[backed] = ret
+        return ret
+
+    @lazy
+    def parents(self):
+        ps = []
+        for p in self.backed.parents:
+            pc = Commit(p)
+            ps.append(pc)
+            pc.children.append(self)
+        return tuple(ps)
+
+    @lazy
+    def committed_time_str(self):
+        return self.backed.committed_datetime.strftime("%Y.%m.%d %H:%M:%S %z")
+
+    @lazy
+    def label(self):
+        return self.committed_time_str + " | " + self.backed.message
+
+
+def build_commit_graph(*heads):
+    stack = list(heads)
+    roots = []
+    visited = set()
+    while stack:
+        c = stack.pop()
+        if c in visited:
+            continue
+        visited.add(c)
+        ps = c.parents
+        if not ps:
+            roots.append(c)
+            continue
+        for p in ps:
+            p.children.append(c)
+            stack.append(p)
+
+    Commit.graph.roots = tuple(roots)
 
 class SaveSettings(object):
 
