@@ -53,6 +53,18 @@ from datetime import (
 
 try:
     from wx import (
+        PostEvent,
+        EVT_SCROLL,
+        EVT_ENTER_WINDOW,
+        Control,
+        EVT_LEFT_UP,
+        EVT_LEFT_DOWN,
+        EVT_MOTION,
+        EVT_MOUSEWHEEL,
+        EVT_SIZE,
+        EVT_PAINT,
+        AutoBufferedPaintDC, # is it cross-platform?
+        BG_STYLE_CUSTOM,
         ID_NEW,
         App,
         Frame,
@@ -78,6 +90,9 @@ try:
         CheckBox,
         EVT_CHECKBOX,
         EVT_MENU
+    )
+    from wx.lib.newevent import (
+        NewEvent
     )
 except ImportError:
     print_exc()
@@ -465,6 +480,283 @@ def build_commit_graph(*heads):
             stack.append(p)
 
     Commit.graph.roots = tuple(roots)
+
+backup_re = compile("backup_([0-9]+)")
+
+
+class Strip(object):
+
+    def __init__(self, c):
+        self.commits = [c]
+        start_j = c._j
+        self.start_j = start_j
+        self.end_j = start_j
+
+    def bind(self, c):
+        self.commits.append(c)
+        self.end_j = max(c._j, self.end_j)
+
+
+CommitSelectedEvent, EVT_COMMIT_SELECTED = NewEvent()
+
+class GitSelector(Control):
+
+    def __init__(self, parent, repo_dir, **kw):
+        super(GitSelector, self).__init__(parent, **kw)
+
+        self._scrollbar = None
+        self.height = 300
+
+        self.repo_dir = repo_dir
+
+        self.scale, self.xshift, self.yshift = 4, 8, -8
+        self.half_step = 1 << (self.scale - 1)
+        self.text_offset_x = 8
+
+        self.read_repo()
+
+        self.Bind(EVT_MOTION, self._on_mouse_motion)
+        self._hl = None
+
+        self.Bind(EVT_LEFT_DOWN, self._on_lmb_down)
+        self.Bind(EVT_LEFT_UP, self._on_lmb_up)
+        self._lmb = None
+
+        self.Bind(EVT_SIZE, self._on_size)
+
+        self.SetBackgroundStyle(BG_STYLE_CUSTOM)
+        self.Bind(EVT_PAINT, self._on_paint)
+
+        self._scroll = 0
+        self.scroll = self.current._y - self.half_step
+        self.Bind(EVT_MOUSEWHEEL, self._on_mouse_wheel)
+
+        self.Bind(EVT_ENTER_WINDOW, self._on_enter_window)
+
+    def read_repo(self):
+        try:
+            repo = Repo(self.repo_dir)
+        except:
+            log("Cannot refresh backup")
+            log(format_exc())
+            return
+
+        self.repo = repo
+
+        heads = []
+
+        Commit.graph = graph = GitGraph()
+
+        for head in repo.heads:
+            c = Commit(head.commit)
+            if c in heads:
+                continue
+            heads.append(c)
+
+        build_commit_graph(*heads)
+
+        # layout commits
+        stripes = []
+        for j, c in enumerate(graph.iter_commits()):
+            c._j = j
+            parents = c.parents
+
+            for p in parents:
+                try:
+                    s = p._s
+                except AttributeError:
+                    # p's strip is already stolen by another child
+                    continue
+                else:
+                    del p._s
+                    s.bind(c)
+                    c._s = s
+                    break
+            else:
+                # No free strip or c is root
+                c._s = s = Strip(c)
+                stripes.append(s)
+
+        for i, s in enumerate(stripes):
+            for c in s.commits:
+                c._i = i
+
+        # self.g_width = i + 1
+
+        # assign coordinates
+        self.index = index = {}
+        max_j = len(graph.cache)
+        scale, xshift, yshift = self.scale, self.xshift, self.yshift
+        self.lines = lines = []
+        for c in graph.iter_commits():
+            c._x = (c._i << scale) + xshift
+            # graph grows to the top
+            inv_j = max_j - c._j
+            index[inv_j] = c
+            c._y = (inv_j << scale) + yshift
+            for p in c.parents:
+                lines.append([p._x, p._y, c._x, c._y])
+
+        self.max_y = (max_j << scale) + yshift
+
+        self.current = graph[repo.active_branch.commit]
+
+    @property
+    def max_scroll(self):
+        return self.max_y - self.height + self.half_step
+
+    @property
+    def scroll(self):
+        return self._scroll
+
+    @scroll.setter
+    def scroll(self, v):
+        scroll = min(max(v, 0), self.max_scroll)
+        if scroll == self._scroll:
+            return
+        self._scroll = scroll
+        if self._scrollbar:
+            self._scrollbar.SetThumbPosition(scroll)
+        self.Refresh()
+
+    def _on_mouse_wheel(self, e):
+        self.scroll -= e.GetWheelRotation()
+
+    @property
+    def scrollbar(self):
+        return self._scrollbar
+
+    @scrollbar.setter
+    def scrollbar(self, sb):
+        prev = self._scrollbar
+        if sb is prev:
+            return
+        if prev is not None:
+            prev.Unbind(EVT_SCROLL, handler = self._on_scroll)
+        self._scrollbar = sb
+        if sb is None:
+            return
+        h = self.height
+        sb.SetScrollbar(self._scroll, h, self.max_scroll + h, h)
+        sb.Bind(EVT_SCROLL, self._on_scroll)
+
+    def _on_scroll(self, e):
+        self.scroll = e.GetPosition()
+
+    def _on_size(self, event):
+        event.Skip()
+        h = self.GetClientSize()[1]
+        self.height = h
+
+        # update scrolling
+        if self._scrollbar:
+            self._scrollbar.SetScrollbar(self._scroll, h, self.max_scroll + h,
+                h
+            )
+        self.scroll = self._scroll
+
+        self.Refresh()
+
+    def _on_mouse_motion(self, e):
+        if self._lmb is None:
+            x, y = e.GetPosition()
+            self._highlight(x, y)
+
+    def _highlight(self, x, y):
+        mid = self.half_step
+        # i = (x + mid - self.xshift) >> self.scale
+        # i = min(i, self.g_width - 1)
+        j = (y + mid + self.scroll - self.yshift) >> self.scale
+        try:
+            c = self.index[j] # (i, j)]
+        except KeyError:
+            self.highlighted = None
+        else:
+            self.highlighted = c
+
+    @property
+    def highlighted(self):
+        return self._hl
+
+    @highlighted.setter
+    def highlighted(self, v):
+        if v is self._hl:
+            return
+        self._hl = v
+        self.Refresh()
+
+    def _on_lmb_down(self, e):
+        self._lmb = e.GetPosition()
+        e.Skip()
+
+    def _on_lmb_up(self, e):
+        lmb = self._lmb
+        if lmb is None:
+            return
+        self._lmb = None
+
+        hl = self._hl
+
+        if hl is self.current:
+            return
+
+        x0, y0 = lmb
+
+        x, y = e.GetPosition()
+        self._highlight(x, y)
+
+        if hl is None:
+            return
+
+        if max(abs(x0 - x), abs(y0 - y)) > self.half_step:
+            return
+
+        PostEvent(self, CommitSelectedEvent(commit = hl))
+
+    def _on_paint(self, _e):
+        scroll = -self.scroll
+        text_offset_x = self.text_offset_x
+
+        dc = AutoBufferedPaintDC(self)
+        dc.Clear()
+
+        text_shift = -self.half_step
+
+        hl, cur = self._hl, self.current
+
+        for x1, y1, x2, y2 in self.lines:
+            dc.DrawLine(x1, y1 + scroll, x2, y2 + scroll)
+
+        br = dc.GetBackground()
+        prev_c = br.GetColour()
+        revert_color = False
+
+        for c in Commit.graph.iter_commits():
+            while True:
+                if c is cur:
+                    br.SetColour((0, 255, 0, 255))
+                elif c is hl:
+                    br.SetColour((255, 0, 0, 255))
+                else:
+                    break
+                dc.SetBrush(br)
+                revert_color = True
+                break
+
+            x = c._x
+            y = c._y
+
+            dc.DrawCircle(x, y + scroll, 4)
+            dc.DrawText(c.label, x + text_offset_x, y + scroll + text_shift)
+
+            if revert_color:
+                br.SetColour(prev_c)
+                dc.SetBrush(br)
+                revert_color = False
+
+    def _on_enter_window(self, _):
+        self.SetFocus()
+
 
 class SaveSettings(object):
 
