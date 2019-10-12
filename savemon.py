@@ -35,7 +35,8 @@ from traceback import (
     format_exc
 )
 from time import (
-    time
+    time,
+    sleep
 )
 from re import (
     compile
@@ -294,6 +295,24 @@ class BackUpThread(Thread):
         self.doCommit = []
 
     def commit(self):
+        try:
+            self._do_commit()
+        except:
+            print("Checking for index.lock")
+            lock = join(self.backupDir, ".git", "index.lock")
+            # XXX: If lock file exists then another Git process can operate.
+            # And removing of the lock is likely a very bad idea.
+            # However, if it still exists after some time then it likely
+            # has been forgotten (there is known bug).
+            # Also, user should not work with the repo while monitoring is
+            # active.
+            if exists(lock):
+                sleep(5)
+                if exists(lock):
+                    remove(lock)
+                    self._do_commit()
+
+    def _do_commit(self):
         repo, doCommit = self.repo, self.doCommit
         if doCommit:
             log("Committing changes")
