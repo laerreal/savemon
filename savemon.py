@@ -954,7 +954,9 @@ class SaveSettings(object):
         while stack:
             node = stack.pop()
             for b in node.blobs:
-                remove(join(save_path, b.path))
+                b_path = join(save_path, b.path)
+                if exists(b_path):
+                    remove(b_path)
             stack.extend(node.trees)
 
         # copy files from target
@@ -962,7 +964,9 @@ class SaveSettings(object):
         while stack:
             node = stack.pop()
             for b in node.blobs:
-                with open(join(save_path, b.path), "wb") as f:
+                b_path = join(save_path, b.path)
+                makedirs(dirname(b_path), exist_ok = True)
+                with open(b_path, "wb+") as f:
                     b.stream_data(f)
             stack.extend(node.trees)
 
