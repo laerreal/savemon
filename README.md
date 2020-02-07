@@ -9,6 +9,8 @@ automatically back the data up.
 
 ### 2020.02.08
 
+* overwriting files in save directory with current backup version,
+  useful after game installation
 * correctly handle non-existing files and directories in save directory
 * workaround internal Git error with `index.lock` file
 

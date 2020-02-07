@@ -481,11 +481,15 @@ class Commit(object):
 
     @lazy
     def committed_time_str(self):
-        return self.backed.committed_datetime.strftime("%Y.%m.%d %H:%M:%S %z")
+        return commit_time_str(self.backed)
 
     @lazy
     def label(self):
         return self.committed_time_str + " | " + self.backed.message
+
+
+def commit_time_str(commit):
+    return commit.committed_datetime.strftime("%Y.%m.%d %H:%M:%S %z")
 
 
 def build_commit_graph(*heads):
@@ -858,6 +862,9 @@ class SaveSettings(object):
         switch = Button(master, label = "Switch")
         master.Bind(EVT_BUTTON, self._on_switch, switch)
         backupDirSizer.Add(switch, 0, EXPAND)
+        override = Button(master, label = "Overwrite")
+        master.Bind(EVT_BUTTON, self._on_overwrite, override)
+        backupDirSizer.Add(override, 0, EXPAND)
         selectBackupDir = Button(master, -1, "Select")
         master.Bind(EVT_BUTTON, self._on_select_backup_dir, selectBackupDir)
         backupDirSizer.Add(selectBackupDir, 0, EXPAND)
@@ -888,6 +895,35 @@ class SaveSettings(object):
             self.filterOut
         ]
 
+    def _on_overwrite(self, _):
+        backupDir = self.backupDir.GetValue()
+        savePath = self.saveDir.GetValue()
+        if not (isdir(backupDir) and bool(savePath)):
+            with MessageDialog(self.master, "Set paths up!", "Error") as dlg:
+                dlg.ShowModal()
+            return
+
+        repo = Repo(backupDir)
+        if repo.is_dirty():
+            raise RuntimeError("Backup repository is dirty")
+
+        c = repo.active_branch.commit
+        label = commit_time_str(c) + " | " + c.message
+
+        dlg = MessageDialog(self.master,
+            "Do you want to overwrite save data with current version?\n\n" +
+            "SHA1: %s\n\n%s\n\n" % (c.hexsha, label) +
+            "Files in save directory will be overwritten!",
+            "Confirmation is required",
+            YES_NO
+        )
+        switch = dlg.ShowModal() == ID_YES
+        dlg.Destroy()
+        if not switch:
+            return
+
+        self._switch_to(c)
+
     def _on_switch(self, _):
         backupDir = self.backupDir.GetValue()
         if not isdir(backupDir):
@@ -913,39 +949,40 @@ class SaveSettings(object):
         active = repo.active_branch
         cur = active.commit
 
-        # select name for backup branch
-        backups = []
-        need_head = True
-        for h in repo.heads:
-            mi = backup_re.match(h.name)
-            if mi:
-                backups.append(int(mi.group(1), base = 10))
-                if h.commit.hexsha == cur.hexsha:
-                    need_head = False
+        if cur.hexsha != target.hexsha:
+            # select name for backup branch
+            backups = []
+            need_head = True
+            for h in repo.heads:
+                mi = backup_re.match(h.name)
+                if mi:
+                    backups.append(int(mi.group(1), base = 10))
+                    if h.commit.hexsha == cur.hexsha:
+                        need_head = False
 
-        if backups:
-            n = max(backups) + 1
-        else:
-            n = 0
+            if backups:
+                n = max(backups) + 1
+            else:
+                n = 0
 
-        # TODO: do not set branch if commits are reachable (other
-        # branch exists)
+            # TODO: do not set branch if commits are reachable (other
+            # branch exists)
 
-        # setup backup branch and checkout new version
-        if need_head:
-            back_head = repo.create_head("backup_%u" % n, cur)
-
-        try:
-            active.commit = target
-            try:
-                active.checkout(True)
-            except:
-                active.commit = cur
-                raise
-        except:
+            # setup backup branch and checkout new version
             if need_head:
-                repo.delete_head(back_head)
-            raise
+                back_head = repo.create_head("backup_%u" % n, cur)
+
+            try:
+                active.commit = target
+                try:
+                    active.checkout(True)
+                except:
+                    active.commit = cur
+                    raise
+            except:
+                if need_head:
+                    repo.delete_head(back_head)
+                raise
 
         save_path = self.saveDir.GetValue()
 
