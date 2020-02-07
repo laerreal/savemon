@@ -7,13 +7,14 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2020.02.08
+
+* correctly handle non-existing files and directories in save directory
+* workaround internal Git error with `index.lock` file
+
 ### 2019.08.31
 
 * switching between backup versions
-
-### 2019.08.10
-
-* fixup failure when a directory is created at runtime
 
 ## Description
 
@@ -33,7 +34,9 @@ Files in the save directory are automatically replaced.
 
 Also, there are [many](https://git-scm.com/downloads/guis) free/open source
 tools to access previous file versions
-(ex. [TortoiseGit](https://tortoisegit.org/download) for Windows)
+(ex. [TortoiseGit](https://tortoisegit.org/download) for Windows).
+**Warning**: never use another tools while save directory is _being monitored._
+It may result in failures with unpredictable consequences.
 
 It's Windows-only (for now).
 
@@ -67,3 +70,7 @@ allow launching scripts on double click.
 
 * Buttons to open both save & backup directories in the file explorer.
 * Support multiple backup settings (`File` -> `Add`).
+
+### 2019.08.10
+
+* fixup failure when a directory is created at runtime
