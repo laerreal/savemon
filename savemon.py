@@ -326,6 +326,7 @@ class BackUpThread(Thread):
             )
             repo.index.commit(message)
             del doCommit[:]
+            log("Committing finished")
 
     def check(self, relN):
         fullN = join(self.saveDir, relN)
