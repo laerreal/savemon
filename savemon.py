@@ -294,7 +294,7 @@ class BackUpThread(Thread):
 
         self.doCommit = []
 
-    def commit(self):
+    def commit(self, attempts = 5, period = 5):
         try:
             self._do_commit()
         except:
@@ -307,10 +307,20 @@ class BackUpThread(Thread):
             # Also, user should not work with the repo while monitoring is
             # active.
             if exists(lock):
-                sleep(5)
-                if exists(lock):
+                while attempts > 0:
+                    print("Waiting for %d sec. (%d)" % (period, attempts))
+                    sleep(period)
+                    if not exists(lock):
+                        break
+                    attempts -= 1
+                else:
+                    print("Removing " + lock)
                     remove(lock)
-                    self._do_commit()
+
+                self._do_commit()
+            else:
+                # some other error
+                raise
 
     def _do_commit(self):
         repo, doCommit = self.repo, self.doCommit
