@@ -7,16 +7,16 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2020.06.12
+
+* hide/show backup settings
+
 ### 2020.02.08
 
 * overwriting files in save directory with current backup version,
   useful after game installation
 * correctly handle non-existing files and directories in save directory
 * workaround internal Git error with `index.lock` file
-
-### 2019.08.31
-
-* switching between backup versions
 
 ## Description
 
@@ -76,3 +76,7 @@ allow launching scripts on double click.
 ### 2019.08.10
 
 * fixup failure when a directory is created at runtime
+
+### 2019.08.31
+
+* switching between backup versions

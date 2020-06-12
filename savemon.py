@@ -54,6 +54,7 @@ from datetime import (
 
 try:
     from wx import (
+        ID_ANY,
         PostEvent,
         EVT_SCROLL,
         EVT_ENTER_WINDOW,
@@ -183,6 +184,7 @@ class Settings(object):
     def __init__(self):
         self.path = expanduser(join("~", "savemon.settings.py"))
         self.saves = []
+        self.hidden = set()
 
     def __enter__(self, *_):
         try:
@@ -211,6 +213,7 @@ class Settings(object):
         code = "\n".join(
             ("%s = %s" % (a, pp.pformat(getattr(self, a)))) for a in [
                 "saves",
+                "hidden",
             ]
         )
         try:
@@ -861,6 +864,9 @@ class SaveSettings(object):
         openSave = Button(master, label = "Open")
         saveDirSizer.Add(openSave, 0, EXPAND)
         master.Bind(EVT_BUTTON, self._on_open_save_dir, openSave)
+        hide = Button(master, label = "Hide")
+        saveDirSizer.Add(hide, 0, EXPAND)
+        master.Bind(EVT_BUTTON, self._on_hide, hide)
 
         backupDirSizer = BoxSizer(HORIZONTAL)
         self.backupDir = TextCtrl(master)
@@ -1153,6 +1159,9 @@ class SaveSettings(object):
                 for t in root2threads[root]:
                     t.exit_request = True
 
+    def _on_hide(self, __):
+        self.master._hide_save_settings(self)
+
     @property
     def saveData(self):
         return (
@@ -1161,6 +1170,8 @@ class SaveSettings(object):
             self.filterOut.GetValue(),
         )
 
+
+SHOW_TITLE_LIMIT = 100
 
 class SaveMonitor(Frame):
 
@@ -1175,8 +1186,10 @@ class SaveMonitor(Frame):
         addItem = fileMenu.Append(ID_NEW, "&Add",
             "Add save data backup settings"
         )
-        self.Bind(EVT_MENU, self._on_add, addItem)
         menuBar.Append(fileMenu, "&File")
+
+        self.showMenu = Menu()
+        menuBar.Append(self.showMenu, "&Show")
 
         aboutMenu = Menu()
         aboutItem = aboutMenu.Append(ID_ABOUT,
@@ -1200,18 +1213,58 @@ class SaveMonitor(Frame):
     def _on_add(self, _):
         self._add_settings(SaveSettings(self))
 
-    def add_settings(self, saveDirVal, backupDirVal, filterOutVal = None):
+    def _hide_save_settings(self, save_settings):
+        self.mainSizer.Hide(save_settings.sizer)
+        self.mainSizer.SetSizeHints(self)
+        self._add_show_item(save_settings)
+
+    def _add_show_item(self, save_settings):
+        save_dir = save_settings.saveDir.GetValue()
+
+        if not save_dir:
+            save_dir = "[not configured]"
+
+        if len(save_dir) > SHOW_TITLE_LIMIT:
+            save_short = (
+                save_dir[:SHOW_TITLE_LIMIT//2 - 3]
+              + "..."
+              + save_dir[SHOW_TITLE_LIMIT//2:]
+            )
+        else:
+            save_short = save_dir
+
+        showItem = self.showMenu.Append(ID_ANY, save_short, save_dir)
+        self.Bind(EVT_MENU,
+            lambda __: self._on_show_save_settings(showItem, save_settings),
+            showItem
+        )
+
+    def _on_show_save_settings(self, item, save_settings):
+        self.showMenu.Remove(item.GetId())
+        self._show_save_settings(save_settings)
+
+    def _show_save_settings(self, save_settings):
+        self.mainSizer.Show(save_settings.sizer)
+        self.mainSizer.SetSizeHints(self)
+
+    def add_settings(self, saveDirVal, backupDirVal,
+        filterOutVal = None,
+        hidden = False
+    ):
         settings = SaveSettings(self,
             saveDirVal = saveDirVal,
             backupDirVal = backupDirVal
         )
         if filterOutVal is not None:
             settings.filterOut.SetValue(filterOutVal)
-        self._add_settings(settings)
+        self._add_settings(settings, hidden)
 
-    def _add_settings(self, settings):
+    def _add_settings(self, settings, hidden):
         self.settings.append(settings)
         self.mainSizer.Add(settings.sizer, 0, EXPAND)
+        if hidden:
+            self.mainSizer.Hide(settings.sizer)
+            self._add_show_item(settings)
         self.mainSizer.SetSizeHints(self)
 
     def _on_close(self, e):
@@ -1220,6 +1273,10 @@ class SaveMonitor(Frame):
                 t.exit_request = True
 
         self.saveData = [s.saveData for s in self.settings]
+        self.hidden = set(
+            i for i, s in enumerate(self.settings)
+                if not self.mainSizer.IsShown(s.sizer)
+        )
         e.Skip()
 
     def _on_about(self, _):
@@ -1239,14 +1296,17 @@ def main():
 
     with Settings() as s:
         mon = SaveMonitor()
-        for save in s.saves:
-            mon.add_settings(*save)
+        for i, save in enumerate(s.saves):
+            mon.add_settings(*save,
+                hidden = i in s.hidden,
+            )
 
         mon.Show(True)
 
         app.MainLoop()
 
         s.saves[:] = mon.saveData
+        s.hidden = mon.hidden
 
 
 if __name__ == "__main__":
