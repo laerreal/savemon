@@ -41,9 +41,7 @@ from time import (
 from re import (
     compile
 )
-from sys import (
-    stdout
-)
+import sys
 from subprocess import (
     Popen
 )
@@ -175,6 +173,7 @@ class lazy(tuple):
 class NullStream(object):
 
     write = lambda *_: None
+    flush = lambda *_: None
 
 nullStream = NullStream()
 
@@ -182,11 +181,23 @@ logLock = Lock()
 globalLogStream = nullStream
 
 
-def log(*messages):
-    with logLock:
-        for s in (globalLogStream, stdout):
-            s.write(" ".join(messages))
-            s.write("\n")
+def cloneStream(stream):
+
+    class StreamClone(object):
+
+        def write(self, *a, **kw):
+            with logLock:
+                globalLogStream.write(*a, **kw)
+                stream.write(*a, **kw)
+
+        def flush(self):
+            globalLogStream.flush()
+            stream.flush()
+
+    return StreamClone()
+
+sys.stderr = cloneStream(sys.stderr)
+sys.stdout = cloneStream(sys.stdout)
 
 
 class Settings(object):
@@ -250,7 +261,7 @@ class MonitorThread(Thread):
 
     def run(self):
         root = self.rootPath
-        log("Start monitoring of '%s'" % root)
+        print("Start monitoring of '%s'" % root)
         hDir = CreateFile(root, FILE_LIST_DIRECTORY,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             None,
@@ -272,11 +283,11 @@ class MonitorThread(Thread):
                 if changed == self.trigger_file:
                     continue
                 self.changes.put((action, file))
-                log(changed,
+                print(changed,
                     ACTIONS.get(action, "[unknown 0x%X]" % action)
                 )
 
-        log("Stop monitoring of '%s'" % root)
+        print("Stop monitoring of '%s'" % root)
         CloseHandle(hDir)
 
         self.onExit()
@@ -314,7 +325,7 @@ class BackUpThread(Thread):
         try:
             self._do_commit()
         except:
-            log("Checking for index.lock")
+            print("Checking for index.lock")
             lock = join(self.backupDir, ".git", "index.lock")
             # XXX: If lock file exists then another Git process can operate.
             # And removing of the lock is likely a very bad idea.
@@ -324,13 +335,13 @@ class BackUpThread(Thread):
             # active.
             if exists(lock):
                 while attempts > 0:
-                    log("Waiting for %d sec. (%d)" % (period, attempts))
+                    print("Waiting for %d sec. (%d)" % (period, attempts))
                     sleep(period)
                     if not exists(lock):
                         break
                     attempts -= 1
                 else:
-                    log("Removing " + lock)
+                    print("Removing " + lock)
                     remove(lock)
 
                 self._do_commit()
@@ -341,7 +352,7 @@ class BackUpThread(Thread):
     def _do_commit(self):
         repo, doCommit = self.repo, self.doCommit
         if doCommit:
-            log("Committing changes")
+            print("Committing changes")
             for method, node in doCommit:
                 if method == "add":
                     repo.index.add([node])
@@ -352,7 +363,7 @@ class BackUpThread(Thread):
             )
             repo.index.commit(message)
             del doCommit[:]
-            log("Committing finished")
+            print("Committing finished")
 
     def check(self, relN):
         fullN = join(self.saveDir, relN)
@@ -364,16 +375,16 @@ class BackUpThread(Thread):
                     with open(fullBackN, "rb") as f1:
                         doChanged = f0.read() != f1.read()
                 if doChanged:
-                    log("Replacing %s with %s" % (fullBackN, fullN))
+                    print("Replacing %s with %s" % (fullBackN, fullN))
                     copyfile(fullN, fullBackN)
                     self.doCommit.append(("add", relN))
             else:
-                log("Copying '%s' to '%s'" % (fullN, fullBackN))
+                print("Copying '%s' to '%s'" % (fullN, fullBackN))
                 copyfile(fullN, fullBackN)
                 self.doCommit.append(("add", relN))
         else:
             if isfile(fullBackN):
-                log("Removing '%s'" % fullBackN)
+                print("Removing '%s'" % fullBackN)
                 self.doCommit.append(("remove", relN))
 
     def run(self):
@@ -384,10 +395,10 @@ class BackUpThread(Thread):
         try:
             self.repo = Repo(backupDir)
         except InvalidGitRepositoryError:
-            log("Initializing Git repository in '%s'" % backupDir)
+            print("Initializing Git repository in '%s'" % backupDir)
             self.repo = Repo.init(backupDir)
 
-        log("Backing up current content of '%s'" % saveDir)
+        print("Backing up current content of '%s'" % saveDir)
         stack = [""]
         while stack:
             cur = stack.pop()
@@ -398,7 +409,7 @@ class BackUpThread(Thread):
                 relN = join(cur, n)
 
                 if filterOut and filterOut.match(relN):
-                    log("Ignoring '%s' (Filter Out)" % relN)
+                    print("Ignoring '%s' (Filter Out)" % relN)
                     continue
 
                 fullN = join(saveDir, relN)
@@ -406,7 +417,7 @@ class BackUpThread(Thread):
 
                 if isdir(fullN):
                     if not exists(fullBackN):
-                        log("Creating directory '%s'" % fullBackN)
+                        print("Creating directory '%s'" % fullBackN)
                         mkdir(fullBackN)
                     stack.append(relN)
                     continue
@@ -430,7 +441,7 @@ class BackUpThread(Thread):
                     # ensure a directory are always precede its files
                     toCheck = sorted(changes, key = lambda c : len(c[1]))
 
-                    log("Checking\n    %s" % "\n    ".join(
+                    print("Checking\n    %s" % "\n    ".join(
                         c[1] for c in toCheck)
                     )
                     for c in toCheck:
@@ -439,7 +450,7 @@ class BackUpThread(Thread):
                         if isdir(fullN):
                             fullBackN = join(self.backupDir, cur)
                             if not exists(fullBackN):
-                                log("Creating directory '%s'" % fullBackN)
+                                print("Creating directory '%s'" % fullBackN)
                                 mkdir(fullBackN)
                         else:
                             self.check(cur)
@@ -449,13 +460,13 @@ class BackUpThread(Thread):
                 continue
 
             if filterOut and filterOut.match(change[1]):
-                log("Ignoring '%s' (Filter Out)" % change[1])
+                print("Ignoring '%s' (Filter Out)" % change[1])
                 continue
             else:
                 changes.add(change)
             lastChange = time()
 
-        log("Stop backing up of '%s'" % saveDir)
+        print("Stop backing up of '%s'" % saveDir)
 
 
 class GitGraph(object):
@@ -594,8 +605,8 @@ class GitSelector(Control):
         try:
             repo = Repo(self.repo_dir)
         except:
-            log("Cannot refresh backup")
-            log(format_exc())
+            print("Cannot refresh backup")
+            print(format_exc())
             return
 
         self.repo = repo
