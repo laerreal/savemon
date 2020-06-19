@@ -54,6 +54,8 @@ from datetime import (
 
 try:
     from wx import (
+        ITEM_CHECK,
+        ID_FILE,
         ID_ANY,
         PostEvent,
         EVT_SCROLL,
@@ -170,13 +172,21 @@ class lazy(tuple):
         return val
 
 
+class NullStream(object):
+
+    write = lambda *_: None
+
+nullStream = NullStream()
+
 logLock = Lock()
+globalLogStream = nullStream
 
 
 def log(*messages):
     with logLock:
-        stdout.write(" ".join(messages))
-        stdout.write("\n")
+        for s in (globalLogStream, stdout):
+            s.write(" ".join(messages))
+            s.write("\n")
 
 
 class Settings(object):
@@ -185,6 +195,8 @@ class Settings(object):
         self.path = expanduser(join("~", "savemon.settings.py"))
         self.saves = []
         self.hidden = set()
+        self.logging = False
+        self.logFile = expanduser(join("~", "savemon.log"))
 
     def __enter__(self, *_):
         try:
@@ -214,6 +226,7 @@ class Settings(object):
             ("%s = %s" % (a, pp.pformat(getattr(self, a)))) for a in [
                 "saves",
                 "hidden",
+                "logging",
             ]
         )
         try:
@@ -1175,7 +1188,10 @@ SHOW_TITLE_LIMIT = 100
 
 class SaveMonitor(Frame):
 
-    def __init__(self):
+    def __init__(self,
+        logging = False,
+        logFile = None,
+    ):
         super(SaveMonitor, self).__init__(None,
             title = "Game Save Monitor"
         )
@@ -1190,6 +1206,17 @@ class SaveMonitor(Frame):
 
         self.showMenu = Menu()
         menuBar.Append(self.showMenu, "&Show")
+
+        debugMenu = Menu()
+        menuBar.Append(debugMenu, "&Debug")
+
+        self._logging = None
+        self.loggingItem = debugMenu.Append(ID_FILE,
+            "&Logging",
+            "Save program output to file",
+            ITEM_CHECK
+        )
+        self.Bind(EVT_MENU, self._on_log, self.loggingItem)
 
         aboutMenu = Menu()
         aboutItem = aboutMenu.Append(ID_ABOUT,
@@ -1209,6 +1236,45 @@ class SaveMonitor(Frame):
         self.SetSizer(mainSizer)
 
         self.Bind(EVT_CLOSE, self._on_close, self)
+
+        self._logFile = logFile
+        if logFile is None:
+            stream = NullStream()
+        else:
+            try:
+                stream = open(logFile, "a+")
+            except:
+                print_exc()
+                print("Cannot log to %s" % logFile)
+                stream = NullStream()
+
+        self._logStream = stream
+
+        self.logging = logging
+
+    @property
+    def logFile(self):
+        return self._logFile
+
+    @property
+    def logging(self):
+        return self._logging
+
+    @logging.setter
+    def logging(self, logging):
+        if self._logging is logging:
+            return
+        self._logging = logging
+        self.loggingItem.Check(logging)
+
+        global globalLogStream
+        if logging:
+            globalLogStream = self._logStream
+        else:
+            globalLogStream = nullStream
+
+    def _on_log(self, __):
+        self.logging = self.loggingItem.IsChecked()
 
     def _on_add(self, _):
         self._add_settings(SaveSettings(self))
@@ -1279,6 +1345,10 @@ class SaveMonitor(Frame):
         )
         e.Skip()
 
+        global globalLogStream
+        globalLogStream = nullStream
+        self._logStream.close()
+
     def _on_about(self, _):
         dlg = MessageDialog(self, "Monitors save directory and backs up"
                 " changes to backup directory. Backup directory is under Git"
@@ -1295,7 +1365,10 @@ def main():
     app = App()
 
     with Settings() as s:
-        mon = SaveMonitor()
+        mon = SaveMonitor(
+            logging = s.logging,
+            logFile = s.logFile,
+        )
         for i, save in enumerate(s.saves):
             mon.add_settings(*save,
                 hidden = i in s.hidden,
@@ -1307,6 +1380,8 @@ def main():
 
         s.saves[:] = mon.saveData
         s.hidden = mon.hidden
+        s.logging = mon.logging
+        s.logFile = mon.logFile
 
 
 if __name__ == "__main__":
