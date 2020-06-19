@@ -301,7 +301,7 @@ class BackUpThread(Thread):
         try:
             self._do_commit()
         except:
-            print("Checking for index.lock")
+            log("Checking for index.lock")
             lock = join(self.backupDir, ".git", "index.lock")
             # XXX: If lock file exists then another Git process can operate.
             # And removing of the lock is likely a very bad idea.
@@ -311,13 +311,13 @@ class BackUpThread(Thread):
             # active.
             if exists(lock):
                 while attempts > 0:
-                    print("Waiting for %d sec. (%d)" % (period, attempts))
+                    log("Waiting for %d sec. (%d)" % (period, attempts))
                     sleep(period)
                     if not exists(lock):
                         break
                     attempts -= 1
                 else:
-                    print("Removing " + lock)
+                    log("Removing " + lock)
                     remove(lock)
 
                 self._do_commit()
