@@ -379,6 +379,10 @@ class BackUpThread(Thread):
                     copyfile(fullN, fullBackN)
                     self.doCommit.append(("add", relN))
             else:
+                fullBackNDir = dirname(fullBackN)
+                if not exists(fullBackNDir):
+                    print("Creating directories '%s'" % fullBackNDir)
+                    makedirs(fullBackNDir)
                 print("Copying '%s' to '%s'" % (fullN, fullBackN))
                 copyfile(fullN, fullBackN)
                 self.doCommit.append(("add", relN))
