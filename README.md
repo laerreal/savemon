@@ -7,16 +7,15 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2020.06.22
+
+* fixup failure when a game creates nesting directories in save directory
+  during monitoring
+* debug logging (turned off by default)
+
 ### 2020.06.12
 
 * hide/show backup settings
-
-### 2020.02.08
-
-* overwriting files in save directory with current backup version,
-  useful after game installation
-* correctly handle non-existing files and directories in save directory
-* workaround internal Git error with `index.lock` file
 
 ## Description
 
@@ -80,3 +79,10 @@ allow launching scripts on double click.
 ### 2019.08.31
 
 * switching between backup versions
+
+### 2020.02.08
+
+* overwriting files in save directory with current backup version,
+  useful after game installation
+* correctly handle non-existing files and directories in save directory
+* workaround internal Git error with `index.lock` file
