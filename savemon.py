@@ -417,16 +417,12 @@ class BackUpThread(Thread):
                     continue
 
                 fullN = join(saveDir, relN)
-                fullBackN = join(backupDir, relN)
 
                 if isdir(fullN):
-                    if not exists(fullBackN):
-                        print("Creating directory '%s'" % fullBackN)
-                        mkdir(fullBackN)
+                    # Note, directories are created by `check` if needed
                     stack.append(relN)
-                    continue
-
-                self.check(relN)
+                else:
+                    self.check(relN)
 
         self.commit()
 
