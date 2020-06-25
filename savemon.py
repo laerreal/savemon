@@ -408,7 +408,9 @@ class BackUpThread(Thread):
             cur = stack.pop()
             curSave = join(saveDir, cur)
             curBackup = join(backupDir, cur)
-            toCheck = set(listdir(curSave) + listdir(curBackup))
+            toCheck = set(listdir(curSave))
+            if isdir(curBackup):
+                toCheck.update(listdir(curBackup))
             for n in toCheck:
                 relN = join(cur, n)
 

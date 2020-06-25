@@ -7,15 +7,16 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2020.06.25
+
+* fixup the failure on absence a folder inside backup folder at monitoring
+  startup
+
 ### 2020.06.22
 
 * fixup failure when a game creates nesting directories in save directory
   during monitoring
 * debug logging (turned off by default)
-
-### 2020.06.12
-
-* hide/show backup settings
 
 ## Description
 
@@ -86,3 +87,7 @@ allow launching scripts on double click.
   useful after game installation
 * correctly handle non-existing files and directories in save directory
 * workaround internal Git error with `index.lock` file
+
+### 2020.06.12
+
+* hide/show backup settings
