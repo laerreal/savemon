@@ -1215,6 +1215,7 @@ class SaveMonitor(Frame):
         addItem = fileMenu.Append(ID_NEW, "&Add",
             "Add save data backup settings"
         )
+        self.Bind(EVT_MENU, self._on_add, addItem)
         menuBar.Append(fileMenu, "&File")
 
         self.showMenu = Menu()
@@ -1290,7 +1291,7 @@ class SaveMonitor(Frame):
         self.logging = self.loggingItem.IsChecked()
 
     def _on_add(self, _):
-        self._add_settings(SaveSettings(self))
+        self._add_settings(SaveSettings(self), False)
 
     def _hide_save_settings(self, save_settings):
         self.mainSizer.Hide(save_settings.sizer)
