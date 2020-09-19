@@ -1237,10 +1237,7 @@ class SaveSettings(object):
             bt.start()
         else:
             self._enable_settings()
-
-            if root in root2threads:
-                for t in root2threads[root]:
-                    t.exit_request = True
+            self.master.cancel_monitoring(root)
 
     def _on_hide(self, __):
         self.master._hide_save_settings(self)
@@ -1430,6 +1427,12 @@ class SaveMonitor(Frame):
             "About")
         dlg.ShowModal()
         dlg.Destroy()
+
+    def cancel_monitoring(self, root):
+        root2threads = self.root2threads
+        if root in root2threads:
+            for t in root2threads[root]:
+                t.exit_request = True
 
 
 def main():
