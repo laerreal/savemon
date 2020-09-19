@@ -7,14 +7,13 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2020.09.19
+
+* error messages instead of some faults
+
 ### 2020.08.09
 
 * fixup "File" -> "Add"
-
-### 2020.06.25
-
-* fixup the failure on absence a folder inside backup folder at monitoring
-  startup
 
 ## Description
 
@@ -95,3 +94,8 @@ allow launching scripts on double click.
 * fixup failure when a game creates nesting directories in save directory
   during monitoring
 * debug logging (turned off by default)
+
+### 2020.06.25
+
+* fixup the failure on absence a folder inside backup folder at monitoring
+  startup
