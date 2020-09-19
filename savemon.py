@@ -23,6 +23,7 @@ from pprint import (
     PrettyPrinter
 )
 from threading import (
+    Event,
     Lock,
     Thread
 )
@@ -198,6 +199,34 @@ def cloneStream(stream):
 
 sys.stderr = cloneStream(sys.stderr)
 sys.stdout = cloneStream(sys.stdout)
+
+
+QuestionAskedEvent, EVT_QUESTION_ASKED = NewEvent()
+
+class Question(object):
+    "A way for a worker thread to communicate with GUI thread."
+
+    def __init__(self, wxEventTarget = None):
+        self.asked = Event()
+        self.answered = Event()
+        self.opaque = None
+        self.result = None
+        self.target = wxEventTarget
+
+    def ask(self, *opaque):
+        self.opaque = opaque
+        self.asked.set()
+        if self.target is not None:
+            PostEvent(self.target, QuestionAskedEvent(question = self))
+        self.answered.wait()
+        self.answered.clear()
+        return self.result
+
+    def poll(self, callback):
+        if self.asked.is_set():
+            self.result = callback(self.opaque)
+            self.asked.clear()
+            self.answered.set()
 
 
 # Domain specific
