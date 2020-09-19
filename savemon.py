@@ -448,14 +448,7 @@ class BackUpThread(Thread):
                     )
                     for c in toCheck:
                         cur = c[1]
-                        fullN = join(self.saveDir, cur)
-                        if isdir(fullN):
-                            fullBackN = join(self.backupDir, cur)
-                            if not exists(fullBackN):
-                                print("Creating directory '%s'" % fullBackN)
-                                mkdir(fullBackN)
-                        else:
-                            self.check(cur)
+                        self.check(cur)
 
                     changes.clear()
                     self.commit()
