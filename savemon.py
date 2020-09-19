@@ -457,6 +457,13 @@ class BackUpThread(Thread):
         self.sync()
         self.commit()
 
+        self.mainloop()
+
+        print("Stop backing up of '%s'" % saveDir)
+
+    def mainloop(self):
+        filterOut = self.filterOut
+
         changes = set()
 
         lastChange = time()
@@ -494,9 +501,6 @@ class BackUpThread(Thread):
             else:
                 changes.add(change)
             lastChange = time()
-
-        print("Stop backing up of '%s'" % saveDir)
-
 
 class GitGraph(object):
 
