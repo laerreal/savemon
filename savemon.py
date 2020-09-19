@@ -358,6 +358,8 @@ class BackUpThread(Thread):
         self.exit_request = False
         self.filterOut = filterOut
 
+        self.gui_question = Question()
+
         self.doCommit = []
         self.doSync = []
 
@@ -497,10 +499,19 @@ class BackUpThread(Thread):
                 else:
                     self.check(relN)
 
-        self.sync()
-        self.commit()
+        if self.doSync:
+            print("Asking user about '%s'" % saveDir)
+            res = self.gui_question.ask("sync", saveDir,
+                self.changes_as_text()
+            )
+        else:
+            res = ID_APPLY
 
-        self.mainloop()
+        if res == ID_APPLY:
+            self.sync()
+            self.commit()
+
+            self.mainloop()
 
         print("Stop backing up of '%s'" % saveDir)
 
@@ -544,6 +555,7 @@ class BackUpThread(Thread):
             else:
                 changes.add(change)
             lastChange = time()
+
 
 class GitGraph(object):
 
@@ -1317,6 +1329,9 @@ class SaveSettings(object):
             mt = MonitorThread(root, lambda : root2threads.pop(root))
             bt = BackUpThread(root, backup, mt.changes, filterOutRe)
             root2threads[root] = (mt, bt)
+
+            bt.gui_question.target = self.master
+
             mt.start()
             bt.start()
         else:
@@ -1403,6 +1418,52 @@ class SaveMonitor(Frame):
         self._logStream = stream
 
         self.logging = logging
+
+        self.Bind(EVT_QUESTION_ASKED, self._on_question_asked)
+
+    def _on_question_asked(self, evt):
+        q = evt.question
+        q.poll(self._do_answer)
+
+    def _do_answer(self, opaque):
+        kind = opaque[0]
+        args = opaque[1:]
+
+        return getattr(self, "_answer_" + kind)(*args)
+
+    def _answer_sync(self, saveDir, changesText):
+        dlg = SyncDialog(self, saveDir, changesText)
+        res = dlg.ShowModal()
+        dlg.Destroy()
+
+        if res == ID_APPLY:
+            pass
+        else:
+            for ss in self.settings:
+                if ss.cbMonitor.IsChecked() \
+                and ss.saveDir.GetValue() == saveDir:
+                    # The backup thred will be stopped
+                    self.cancel_monitoring(saveDir)
+
+                    if res == ID_REVERT:
+                        # TODO: remove added files
+                        if ss.ask_and_overwrite():
+                            ss._on_monitor(None)
+                            monitoring_stopped = False
+                        else:
+                            monitoring_stopped = True
+                    else: # res == ID_CANCEL
+                        monitoring_stopped = True
+
+                    if monitoring_stopped:
+                        ss.cbMonitor.SetValue(False)
+                        ss._enable_settings()
+
+                    break
+            else:
+                print("Can't find active settings for '%s'" % saveDir)
+
+        return res
 
     @property
     def logFile(self):
