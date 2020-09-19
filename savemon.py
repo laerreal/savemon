@@ -392,11 +392,13 @@ class BackUpThread(Thread):
                 sync((self._remove, fullBackN, relN))
 
     def _replace(self, fullBackN, fullN, relN):
+        "Changed {2}"
         print("Replacing %s with %s" % (fullBackN, fullN))
         copyfile(fullN, fullBackN)
         self.doCommit.append(("add", relN))
 
     def _add(self, fullBackN, fullN, relN):
+        "Added {2}"
         fullBackNDir = dirname(fullBackN)
         if not exists(fullBackNDir):
             print("Creating directories '%s'" % fullBackNDir)
@@ -406,6 +408,7 @@ class BackUpThread(Thread):
         self.doCommit.append(("add", relN))
 
     def _remove(self, fullBackN, relN):
+        "Removed {1}"
         print("Removing '%s'" % fullBackN)
         self.doCommit.append(("remove", relN))
 
@@ -415,6 +418,13 @@ class BackUpThread(Thread):
 
         for action in doSync:
             action[0](*action[1:])
+
+    def iter_changes_lines(self):
+        for action in self.doSync:
+            yield action[0].__doc__.format(*action[1:])
+
+    def changes_as_text(self):
+        return "\n".join(self.iter_changes_lines())
 
     def run(self):
         backupDir = self.backupDir
