@@ -200,6 +200,12 @@ sys.stderr = cloneStream(sys.stderr)
 sys.stdout = cloneStream(sys.stdout)
 
 
+# Domain specific
+#################
+
+re_system_name = compile("^.git$")
+
+
 class Settings(object):
 
     def __init__(self):
@@ -414,6 +420,9 @@ class BackUpThread(Thread):
             for n in toCheck:
                 relN = join(cur, n)
 
+                if re_system_name.match(relN):
+                    continue
+
                 if filterOut and filterOut.match(relN):
                     print("Ignoring '%s' (Filter Out)" % relN)
                     continue
@@ -454,8 +463,11 @@ class BackUpThread(Thread):
                     self.commit()
                 continue
 
-            if filterOut and filterOut.match(change[1]):
-                print("Ignoring '%s' (Filter Out)" % change[1])
+            relN = change[1]
+            if re_system_name.match(relN):
+                continue
+            elif filterOut and filterOut.match(relN):
+                print("Ignoring '%s' (Filter Out)" % relN)
                 continue
             else:
                 changes.add(change)
