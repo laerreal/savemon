@@ -7,6 +7,11 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2020.09.19 (devel)
+
+* Ask user when save directory content differs from backup directory content
+  (draft feature).
+
 ### 2020.09.19
 
 * error messages instead of some faults
