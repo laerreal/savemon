@@ -944,12 +944,15 @@ class SaveSettings(object):
         ]
 
     def _on_overwrite(self, _):
+        self.ask_and_overwrite()
+
+    def ask_and_overwrite(self):
         backupDir = self.backupDir.GetValue()
         savePath = self.saveDir.GetValue()
         if not (isdir(backupDir) and bool(savePath)):
             with MessageDialog(self.master, "Set paths up!", "Error") as dlg:
                 dlg.ShowModal()
-            return
+            return False
 
         repo = Repo(backupDir)
         if repo.is_dirty():
@@ -968,9 +971,10 @@ class SaveSettings(object):
         switch = dlg.ShowModal() == ID_YES
         dlg.Destroy()
         if not switch:
-            return
+            return False
 
         self._switch_to(c)
+        return True
 
     def _on_switch(self, _):
         backupDir = self.backupDir.GetValue()
