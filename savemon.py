@@ -91,6 +91,10 @@ try:
         ID_OK,
         ID_CANCEL,
         ID_YES,
+        ID_APPLY,
+        ID_REVERT,
+        TE_MULTILINE,
+        TE_READONLY,
         MessageDialog,
         YES_NO,
         ID_NO,
@@ -896,6 +900,47 @@ class GitSelector(Control):
 
     def _on_enter_window(self, _):
         self.SetFocus()
+
+
+class SyncDialog(Dialog):
+
+    def __init__(self, parent, saveDir, changesText):
+        super(SyncDialog, self).__init__(parent,
+            title = "Save directory content differs",
+            style = DEFAULT_DIALOG_STYLE | RESIZE_BORDER
+        )
+        self.SetMinSize((300, 100))
+
+        sizer = BoxSizer(VERTICAL)
+
+        saveDirLabel = StaticText(self, label = saveDir)
+        sizer.Add(saveDirLabel, 0, EXPAND)
+
+        text = TextCtrl(self,
+            value = changesText,
+            style = TE_MULTILINE | TE_READONLY,
+        )
+        sizer.Add(text, 1, EXPAND)
+
+        question = StaticText(self, label = "What to do?")
+        sizer.Add(question, 0, EXPAND)
+
+        btCommit = Button(self, -1, "Commit as new version")
+        sizer.Add(btCommit, 0, EXPAND)
+        self.Bind(EVT_BUTTON, self._on_commit, btCommit)
+
+        btOverwrite = Button(self, -1, "Overwrite with backup version")
+        sizer.Add(btOverwrite, 0, EXPAND)
+        self.Bind(EVT_BUTTON, self._on_overwrite, btOverwrite)
+
+        sizer.SetSizeHints(self)
+        self.SetSizer(sizer)
+
+    def _on_commit(self, _):
+        self.EndModal(ID_APPLY)
+
+    def _on_overwrite(self, _):
+        self.EndModal(ID_REVERT)
 
 
 class BackupSelector(Dialog):
