@@ -962,7 +962,25 @@ class SaveSettings(object):
                 dlg.ShowModal()
             return False
 
-        c = repo.active_branch.commit
+        active_branch = repo.active_branch
+
+        try:
+            c = active_branch.commit
+        except Exception as e:
+            hint = ""
+
+            try:
+                if active_branch.name == "master":
+                    hint = "Is backup empty?"
+            except:
+                pass
+
+            with MessageDialog(self.master,
+                str(e) + "\n" + hint,
+                "Error") as dlg:
+                dlg.ShowModal()
+            return False
+
         label = commit_time_str(c) + " | " + c.message
 
         dlg = MessageDialog(self.master,
