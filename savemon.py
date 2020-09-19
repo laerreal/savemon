@@ -326,6 +326,7 @@ class BackUpThread(Thread):
         self.filterOut = filterOut
 
         self.doCommit = []
+        self.doSync = []
 
     def commit(self, attempts = 5, period = 5):
         try:
@@ -375,27 +376,45 @@ class BackUpThread(Thread):
         fullN = join(self.saveDir, relN)
         fullBackN = join(self.backupDir, relN)
 
+        sync = self.doSync.append
+
         if isfile(fullN):
             if exists(fullBackN):
                 with open(fullN, "rb") as f0:
                     with open(fullBackN, "rb") as f1:
                         doChanged = f0.read() != f1.read()
                 if doChanged:
-                    print("Replacing %s with %s" % (fullBackN, fullN))
-                    copyfile(fullN, fullBackN)
-                    self.doCommit.append(("add", relN))
+                    sync((self._replace, fullBackN, fullN, relN))
             else:
-                fullBackNDir = dirname(fullBackN)
-                if not exists(fullBackNDir):
-                    print("Creating directories '%s'" % fullBackNDir)
-                    makedirs(fullBackNDir)
-                print("Copying '%s' to '%s'" % (fullN, fullBackN))
-                copyfile(fullN, fullBackN)
-                self.doCommit.append(("add", relN))
+                sync((self._add, fullBackN, fullN, relN))
         else:
             if isfile(fullBackN):
-                print("Removing '%s'" % fullBackN)
-                self.doCommit.append(("remove", relN))
+                sync((self._remove, fullBackN, relN))
+
+    def _replace(self, fullBackN, fullN, relN):
+        print("Replacing %s with %s" % (fullBackN, fullN))
+        copyfile(fullN, fullBackN)
+        self.doCommit.append(("add", relN))
+
+    def _add(self, fullBackN, fullN, relN):
+        fullBackNDir = dirname(fullBackN)
+        if not exists(fullBackNDir):
+            print("Creating directories '%s'" % fullBackNDir)
+            makedirs(fullBackNDir)
+        print("Copying '%s' to '%s'" % (fullN, fullBackN))
+        copyfile(fullN, fullBackN)
+        self.doCommit.append(("add", relN))
+
+    def _remove(self, fullBackN, relN):
+        print("Removing '%s'" % fullBackN)
+        self.doCommit.append(("remove", relN))
+
+    def sync(self):
+        doSync = self.doSync
+        self.doSync = []
+
+        for action in doSync:
+            action[0](*action[1:])
 
     def run(self):
         backupDir = self.backupDir
@@ -435,6 +454,7 @@ class BackUpThread(Thread):
                 else:
                     self.check(relN)
 
+        self.sync()
         self.commit()
 
         changes = set()
@@ -460,6 +480,8 @@ class BackUpThread(Thread):
                         self.check(cur)
 
                     changes.clear()
+
+                    self.sync()
                     self.commit()
                 continue
 
