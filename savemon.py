@@ -956,7 +956,11 @@ class SaveSettings(object):
 
         repo = Repo(backupDir)
         if repo.is_dirty():
-            raise RuntimeError("Backup repository is dirty")
+            with MessageDialog(self.master,
+                "Backup repository '%s' is dirty" % backupDir,
+                "Error") as dlg:
+                dlg.ShowModal()
+            return False
 
         c = repo.active_branch.commit
         label = commit_time_str(c) + " | " + c.message
