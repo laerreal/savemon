@@ -500,6 +500,7 @@ class BackUpThread(Thread):
                     self.check(relN)
 
         if self.doSync:
+            # TODO: do not ask if backup is just initialized
             print("Asking user about '%s'" % saveDir)
             res = self.gui_question.ask("sync", saveDir,
                 self.changes_as_text()
