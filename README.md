@@ -7,6 +7,10 @@ automatically back the data up.
 
 ## Recent updates
 
+### 2021.04.10 (devel)
+
+* Horizontal scrolling for version selector.
+
 ### 2020.09.19 (devel)
 
 * Ask user when save directory content differs from backup directory content

@@ -61,6 +61,7 @@ try:
         EVT_ENTER_WINDOW,
         ScrollBar,
         SB_VERTICAL,
+        SB_HORIZONTAL,
         Control,
         EVT_LEFT_UP,
         EVT_LEFT_DOWN,
@@ -662,7 +663,9 @@ class GitSelector(Control):
         super(GitSelector, self).__init__(parent, **kw)
 
         self._scrollbar = None
+        self._scrollbar_h = None
         self.height = 300
+        self.width = 400
 
         self.repo_dir = repo_dir
 
@@ -686,6 +689,8 @@ class GitSelector(Control):
 
         self._scroll = 0
         self.scroll = self.current._y - self.half_step
+        self._scroll_x = 0
+        self.scroll_x = self.current._x - self.half_step
         self.Bind(EVT_MOUSEWHEEL, self._on_mouse_wheel)
 
         self.Bind(EVT_ENTER_WINDOW, self._on_enter_window)
@@ -738,8 +743,6 @@ class GitSelector(Control):
             for c in s.commits:
                 c._i = i
 
-        # self.g_width = i + 1
-
         # assign coordinates
         self.index = index = {}
         max_j = len(graph.cache)
@@ -755,6 +758,7 @@ class GitSelector(Control):
                 lines.append([p._x, p._y, c._x, c._y])
 
         self.max_y = (max_j << scale) + yshift
+        self.max_x = (max(0, len(stripes) - 1) << scale) + xshift
 
         self.current = graph[repo.active_branch.commit]
 
@@ -774,6 +778,24 @@ class GitSelector(Control):
         self._scroll = scroll
         if self._scrollbar:
             self._scrollbar.SetThumbPosition(scroll)
+        self.Refresh()
+
+    @property
+    def max_scroll_x(self):
+        return self.max_x - self.xshift
+
+    @property
+    def scroll_x(self):
+        return self._scroll_x
+
+    @scroll_x.setter
+    def scroll_x(self, v):
+        scroll = min(max(v, 0), self.max_scroll_x)
+        if scroll == self._scroll_x:
+            return
+        self._scroll_x = scroll
+        if self._scrollbar_h:
+            self._scrollbar_h.SetThumbPosition(scroll)
         self.Refresh()
 
     def _on_mouse_wheel(self, e):
@@ -800,9 +822,27 @@ class GitSelector(Control):
     def _on_scroll(self, e):
         self.scroll = e.GetPosition()
 
+    @scrollbar.setter
+    def scrollbar_h(self, sb):
+        prev = self._scrollbar_h
+        if sb is prev:
+            return
+        if prev is not None:
+            prev.Unbind(EVT_SCROLL, handler = self._on_scroll_h)
+        self._scrollbar_h = sb
+        if sb is None:
+            return
+        w = self.width
+        sb.SetScrollbar(self._scroll_x, w, self.max_scroll_x + w, w)
+        sb.Bind(EVT_SCROLL, self._on_scroll_h)
+
+    def _on_scroll_h(self, e):
+        self.scroll_x = e.GetPosition()
+
     def _on_size(self, event):
         event.Skip()
-        h = self.GetClientSize()[1]
+        w, h = self.GetClientSize()
+        self.width = w
         self.height = h
 
         # update scrolling
@@ -811,6 +851,12 @@ class GitSelector(Control):
                 h
             )
         self.scroll = self._scroll
+
+        if self._scrollbar_h:
+            self._scrollbar_h.SetScrollbar(self._scroll_x, w,
+                self.max_scroll_x + w, w
+            )
+        self.scroll_x = self._scroll_x
 
         self.Refresh()
 
@@ -872,6 +918,7 @@ class GitSelector(Control):
 
     def _on_paint(self, _e):
         scroll = -self.scroll
+        scroll_x = -self.scroll_x
         text_offset_x = self.text_offset_x
 
         dc = AutoBufferedPaintDC(self)
@@ -882,7 +929,7 @@ class GitSelector(Control):
         hl, cur = self._hl, self.current
 
         for x1, y1, x2, y2 in self.lines:
-            dc.DrawLine(x1, y1 + scroll, x2, y2 + scroll)
+            dc.DrawLine(x1 + scroll_x, y1 + scroll, x2 + scroll_x, y2 + scroll)
 
         br = dc.GetBackground()
         prev_c = br.GetColour()
@@ -903,8 +950,10 @@ class GitSelector(Control):
             x = c._x
             y = c._y
 
-            dc.DrawCircle(x, y + scroll, 4)
-            dc.DrawText(c.label, x + text_offset_x, y + scroll + text_shift)
+            dc.DrawCircle(x + scroll_x, y + scroll, 4)
+            dc.DrawText(
+                c.label, x + text_offset_x + scroll_x, y + scroll + text_shift
+            )
 
             if revert_color:
                 br.SetColour(prev_c)
@@ -966,8 +1015,15 @@ class BackupSelector(Dialog):
 
         sizer = BoxSizer(HORIZONTAL)
 
+        v_sizer = BoxSizer(VERTICAL)
+        sizer.Add(v_sizer, 1, EXPAND)
+
         selector = GitSelector(self, backupDir, size = (700, 500))
-        sizer.Add(selector, 1, EXPAND)
+        v_sizer.Add(selector, 1, EXPAND)
+
+        scrollbar_h = ScrollBar(self, style = SB_HORIZONTAL)
+        selector.scrollbar_h = scrollbar_h
+        v_sizer.Add(scrollbar_h, 0, EXPAND)
 
         scrollbar = ScrollBar(self, style = SB_VERTICAL)
         selector.scrollbar = scrollbar
