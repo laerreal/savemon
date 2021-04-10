@@ -928,12 +928,34 @@ class GitSelector(Control):
 
         hl, cur = self._hl, self.current
 
+        w, h = self.width, self.height
+
         for x1, y1, x2, y2 in self.lines:
-            dc.DrawLine(x1 + scroll_x, y1 + scroll, x2 + scroll_x, y2 + scroll)
+            # don't draw line if both points are beyond canvas
+            x1 += scroll_x
+            x2 += scroll_x
+
+            if x1 < 0 and x2 < 0:
+                continue
+            if w < x1 and w < x2:
+                continue
+
+            y1 += scroll
+            y2 += scroll
+
+            if y1 < 0 and y2 < 0:
+                continue
+            if h < y1 and h < y2:
+                continue
+
+            dc.DrawLine(x1, y1, x2, y2)
 
         br = dc.GetBackground()
         prev_c = br.GetColour()
         revert_color = False
+
+        circle_limit_x = w + 4
+        circle_limit_y = h + 4
 
         for c in Commit.graph.iter_commits():
             while True:
@@ -950,10 +972,15 @@ class GitSelector(Control):
             x = c._x
             y = c._y
 
-            dc.DrawCircle(x + scroll_x, y + scroll, 4)
-            dc.DrawText(
-                c.label, x + text_offset_x + scroll_x, y + scroll + text_shift
-            )
+            cx, cy = x + scroll_x, y + scroll
+            if -4 < cx and cx < circle_limit_x \
+            and -4 < cy and cy < circle_limit_y:
+                dc.DrawCircle(cx, cy, 4)
+
+            tx, ty = x + text_offset_x + scroll_x, y + scroll + text_shift
+
+            if -20 < ty and ty < h and tx < w:
+                dc.DrawText(c.label, tx, ty)
 
             if revert_color:
                 br.SetColour(prev_c)

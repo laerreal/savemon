@@ -10,6 +10,7 @@ automatically back the data up.
 ### 2021.04.10 (devel)
 
 * Horizontal scrolling for version selector.
+* Optimize version graph drawing.
 
 ### 2020.09.19 (devel)
 
