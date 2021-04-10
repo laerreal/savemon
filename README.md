@@ -11,6 +11,7 @@ automatically back the data up.
 
 * Horizontal scrolling for version selector.
 * Optimize version graph drawing.
+* Drag version graph while right mouse button is held.
 
 ### 2020.09.19 (devel)
 

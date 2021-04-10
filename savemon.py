@@ -65,7 +65,10 @@ try:
         Control,
         EVT_LEFT_UP,
         EVT_LEFT_DOWN,
+        EVT_RIGHT_UP,
+        EVT_RIGHT_DOWN,
         EVT_MOTION,
+        EVT_LEAVE_WINDOW,
         DEFAULT_DIALOG_STYLE,
         RESIZE_BORDER,
         EVT_MOUSEWHEEL,
@@ -682,6 +685,12 @@ class GitSelector(Control):
         self.Bind(EVT_LEFT_UP, self._on_lmb_up)
         self._lmb = None
 
+        self.Bind(EVT_RIGHT_DOWN, self._on_rmb_down)
+        self.Bind(EVT_RIGHT_UP, self._on_rmb_up)
+        self.Bind(EVT_LEAVE_WINDOW, self._on_leave_window)
+        self._rmb = None
+        self._prev_drag = None
+
         self.Bind(EVT_SIZE, self._on_size)
 
         self.SetBackgroundStyle(BG_STYLE_CUSTOM)
@@ -865,6 +874,20 @@ class GitSelector(Control):
             x, y = e.GetPosition()
             self._highlight(x, y)
 
+        # Dragging while right mouse button is held.
+        rmb = self._rmb
+        if rmb is not None:
+            x, y = rmb
+            ex, ey = e.GetPosition()
+            drag = ex - x, ey - y
+
+            prev_drag = self._prev_drag
+            if drag != prev_drag:
+                self._prev_drag = drag
+
+                self.scroll_x += prev_drag[0] - drag[0]
+                self.scroll += prev_drag[1] - drag[1]
+
     def _highlight(self, x, y):
         mid = self.half_step
         # i = (x + mid - self.xshift) >> self.scale
@@ -915,6 +938,23 @@ class GitSelector(Control):
             return
 
         PostEvent(self, CommitSelectedEvent(commit = hl))
+
+    def _on_rmb_down(self, e):
+        self._rmb = e.GetPosition()
+        self._prev_drag = 0, 0
+        e.Skip()
+
+    def _on_rmb_up(self, e):
+        self._stop_drag()
+        e.Skip()
+
+    def _on_leave_window(self, __):
+        # TODO: how to catch EVT_MOTION and EVT_RIGHT_UP beyond the canvas?
+        self._stop_drag()
+
+    def _stop_drag(self):
+        self._rmb = None
+        self._prev_drag = None
 
     def _on_paint(self, _e):
         scroll = -self.scroll
