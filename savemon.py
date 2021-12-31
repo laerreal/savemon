@@ -16,6 +16,7 @@ from shutil import (
 from os import (
     sep,
     mkdir,
+    rmdir,
     listdir,
     remove
 )
@@ -526,6 +527,54 @@ class BackUpThread(Thread):
         if res == ID_APPLY:
             self.sync()
             self.commit()
+
+            print("Removing absent directories from '%s'" % backupDir)
+
+            to_remove = []
+            stack = [""]
+            while stack:
+                cur = stack.pop()
+                curSave = join(saveDir, cur)
+                curBackup = join(backupDir, cur)
+                toCheck = set()
+                if isdir(curSave):
+                    toCheck.update(listdir(curSave))
+                if isdir(curBackup):
+                    toCheck.update(listdir(curBackup))
+                for n in toCheck:
+                    relN = join(cur, n)
+
+                    if re_system_name.match(relN):
+                        continue
+
+                    if filterOut and filterOut.match(relN):
+                        print("Ignoring '%s' (Filter Out)" % relN)
+                        continue
+
+                    backN = join(backupDir, relN)
+
+                    if not isdir(backN):
+                        continue
+
+                    stack.append(relN)
+
+                    if isdir(join(saveDir, relN)):
+                        continue
+
+                    to_remove.append(backN)
+
+            for d in reversed(to_remove):
+                print("Removing '%s'" % d)
+                try:
+                    rmdir(d)
+                except:
+                    # May result in directory not empty error if inner
+                    # directories has just been removed.
+                    sleep(0.1)
+                    try:
+                        rmdir(d)
+                    except:
+                        break
 
             print("Start monitoring of '%s'" % saveDir)
             self.mainloop()
