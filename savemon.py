@@ -419,6 +419,7 @@ class BackUpThread(Thread):
 
         if isfile(fullN):
             if exists(fullBackN):
+                print("Comparing " + relN)
                 with open(fullN, "rb") as f0:
                     with open(fullBackN, "rb") as f1:
                         doChanged = f0.read() != f1.read()
@@ -518,6 +519,7 @@ class BackUpThread(Thread):
             self.sync()
             self.commit()
 
+            print("Start monitoring of '%s'" % saveDir)
             self.mainloop()
 
         print("Stop backing up of '%s'" % saveDir)
