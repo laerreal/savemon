@@ -456,7 +456,15 @@ class BackUpThread(Thread):
         doSync = self.doSync
         self.doSync = []
 
-        for action in doSync:
+        total = len(doSync)
+        if not total:
+            return
+
+        fmt = "%%d / %d" % total
+
+        print("Synchronizing ...")
+        for i, action in doSync:
+            print(fmt % i)
             action[0](*action[1:])
 
     def iter_changes_lines(self):
