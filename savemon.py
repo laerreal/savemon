@@ -464,7 +464,7 @@ class BackUpThread(Thread):
         fmt = "%%d / %d" % total
 
         print("Synchronizing ...")
-        for i, action in doSync:
+        for i, action in enumerate(doSync):
             print(fmt % i)
             action[0](*action[1:])
 
