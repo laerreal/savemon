@@ -482,7 +482,9 @@ class BackUpThread(Thread):
             cur = stack.pop()
             curSave = join(saveDir, cur)
             curBackup = join(backupDir, cur)
-            toCheck = set(listdir(curSave))
+            toCheck = set()
+            if isdir(curSave):
+                toCheck.update(listdir(curSave))
             if isdir(curBackup):
                 toCheck.update(listdir(curBackup))
             for n in toCheck:
@@ -495,9 +497,7 @@ class BackUpThread(Thread):
                     print("Ignoring '%s' (Filter Out)" % relN)
                     continue
 
-                fullN = join(saveDir, relN)
-
-                if isdir(fullN):
+                if isdir(join(saveDir, relN)) or isdir(join(backupDir, relN)):
                     # Note, directories are created by `check` if needed
                     stack.append(relN)
                 else:
