@@ -472,9 +472,11 @@ class BackUpThread(Thread):
 
         try:
             self.repo = Repo(backupDir)
+            just_inited = False
         except InvalidGitRepositoryError:
             print("Initializing Git repository in '%s'" % backupDir)
             self.repo = Repo.init(backupDir)
+            just_inited = True
 
         print("Backing up current content of '%s'" % saveDir)
         stack = [""]
@@ -503,8 +505,8 @@ class BackUpThread(Thread):
                 else:
                     self.check(relN)
 
-        if self.doSync:
-            # TODO: do not ask if backup is just initialized
+        if self.doSync and not just_inited:
+            # do not ask if backup is just initialized
             print("Asking user about '%s'" % saveDir)
             res = self.gui_question.ask("sync", saveDir,
                 self.changes_as_text()
