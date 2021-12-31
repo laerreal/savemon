@@ -168,11 +168,11 @@ def open_directory_in_explorer(path):
 
 class lazy(tuple):
 
-    def __new__(type, getter):
-        ret = tuple.__new__(type, (getter,))
+    def __new__(cls, getter):
+        ret = tuple.__new__(cls, (getter,))
         return ret
 
-    def __get__(self, obj, type = None):
+    def __get__(self, obj, cls = None):
         getter = self[0]
         val = getter(obj)
         obj.__dict__[getter.__name__] = val
@@ -604,13 +604,13 @@ class Commit(object):
 
     graph = GitGraph()
 
-    def __new__(type, backed, *a, **kw):
-        ret = type.graph.get(backed, None)
+    def __new__(cls, backed, *a, **kw):
+        ret = cls.graph.get(backed, None)
         if ret is None:
-            ret = super().__new__(type)
+            ret = super().__new__(cls)
             ret.backed = backed
             ret.children = []
-            type.graph[backed] = ret
+            cls.graph[backed] = ret
         return ret
 
     @lazy
