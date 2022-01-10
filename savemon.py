@@ -1483,7 +1483,7 @@ class SaveSettings(object):
                 )
                 res = dlg.ShowModal()
                 dlg.Destroy()
-                if not res:
+                if res == ID_NO:
                     self.cbMonitor.SetValue(False)
                     self._enable_settings()
                     return
